@@ -1,6 +1,5 @@
 #include "system.hpp"
 #include <cstdio>
-#include <iostream>
 #include <Eigen/IterativeLinearSolvers>
 
 int main(int argc, char **argv) {
@@ -14,5 +13,7 @@ int main(int argc, char **argv) {
   Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
   solver.compute(A);
   x = solver.solve(f);
+  printf("Solved\n");
+  printf("Error: %f\n", (A * x - f).norm());
   return 0;
 }
