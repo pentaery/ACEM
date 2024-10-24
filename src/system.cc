@@ -1,4 +1,5 @@
 #include "system.hh"
+#include "mkl_spblas.h"
 #include <cmath>
 
 void formRHS(std::vector<precision> &vec, int size) {
@@ -11,3 +12,6 @@ void formRHS(std::vector<precision> &vec, int size) {
   }
 }
 
+void formA(sparse_matrix_t &A, int size) {
+
+}
