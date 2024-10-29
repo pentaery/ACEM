@@ -2,7 +2,6 @@
 #include <cmath>
 #include <vector>
 #include "mkl.h"
-#define precision float
 
-void formRHS(std::vector<precision> &vec, int size);
-void formA(sparse_matrix_t &A, int size);
+void formRHS(std::vector<float> &vec, MKL_INT size);
+void formA(sparse_matrix_t &A, MKL_INT size);

@@ -1,8 +1,8 @@
 find_package(OpenMP REQUIRED)
-
-
-add_executable(test HelloOpenMP.c)
-
+add_executable(test looplevel.c timer.c)
 if(OpenMP_CXX_FOUND)
-    target_link_libraries(test OpenMP::OpenMP_CXX)
+    message("======${OpenMP_CXX_FLAGS}======")
+    message("======${OpenMP_CXX_LIBRARIES}======")
+    target_compile_options(test PRIVATE ${OpenMP_CXX_FLAGS})  
+    target_link_libraries(test PRIVATE ${OpenMP_CXX_LIBRARIES}) 
 endif()

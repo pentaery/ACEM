@@ -2,9 +2,9 @@
 #include <cmath>
 #include <cstdio>
 
-void formRHS(std::vector<precision> &vec, int size) {
-  precision gridLength = 1.0 / (size + 1);
-  int row = 0, col = 0;
+void formRHS(std::vector<float> &vec, MKL_INT size) {
+  float gridLength = 1.0 / (size + 1);
+  MKL_INT row = 0, col = 0;
   for (row = 0; row < size; ++row) {
     for (col = 0; col < size; ++col) {
       vec[row * size + col] = 2 * M_PI * M_PI * sin(M_PI * (row + 1) * gridLength) * sin(M_PI * (col + 1) * gridLength);
@@ -12,12 +12,12 @@ void formRHS(std::vector<precision> &vec, int size) {
   }
 }
 
-void formA(sparse_matrix_t &A, int size) {
-  std::vector<int> row_indx;
-  std::vector<int> col_indx;
-  std::vector<precision> values;
-  precision gridLength = 1.0 / (size + 1);
-  int row = 0, col = 0;
+void formA(sparse_matrix_t &A, MKL_INT size) {
+  std::vector<MKL_INT> row_indx;
+  std::vector<MKL_INT> col_indx;
+  std::vector<float> values;
+  float gridLength = 1.0 / (size + 1);
+  MKL_INT row = 0, col = 0;
   for (row = 0; row < size; ++row) {
     for (col = 0; col < size; ++col) {
       row_indx.push_back(row * size + col);
@@ -52,6 +52,4 @@ void formA(sparse_matrix_t &A, int size) {
                           &values[0]);
 
   mkl_sparse_convert_csr(B, SPARSE_OPERATION_NON_TRANSPOSE, &A);
-
-  LAPACKE_spotrf(LAPACK_ROW_MAJOR, 'L', size * size, &A, size * size);
 }
