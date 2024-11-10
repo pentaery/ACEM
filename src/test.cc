@@ -10,20 +10,20 @@ int main() {
   clock_t start = clock();
   int size = 2;
   sparse_status_t status;
-  std::vector<float> rhs(8);
-  std::vector<float> sol(8);
+  std::vector<double> rhs(8);
+  std::vector<double> sol(8);
   formRHS(rhs, size);
 
   sparse_matrix_t A;
   formA(A, size);
 
-  sparse_index_base_t indexing = SPARSE_INDEX_BASE_ZERO;
+  sparse_index_base_t indexing = SPARSE_INDEX_BASE_ONE;
   int rows, cols;
   int *rows_start, *rows_end, *col_index;
-  float *val;
+  double *val;
   std::vector<int> rowstat(size);
 
-  mkl_sparse_s_export_csr(A, &indexing, &rows, &cols, &rows_start, &rows_end,
+  mkl_sparse_d_export_csr(A, &indexing, &rows, &cols, &rows_start, &rows_end,
                           &col_index, &val);
 
   rows_start[size * size] = rows_end[size * size - 1];
@@ -48,8 +48,8 @@ int main() {
   for (i = 0; i < 64; i++) {
     pt[i] = 0;
   }
-  MKL_INT maxfct = 1, mnum = 1, mtype = -2, phase = 13;
-  MKL_INT n = 4;
+  MKL_INT maxfct = 1, mnum = 1, mtype = 2, phase = 13;
+  MKL_INT n = size * size;
   MKL_INT nrhs = 1, msglv1 = 1;
   MKL_INT perm[64], iparm[64];
   MKL_INT idum;
@@ -78,20 +78,20 @@ int main() {
   // iparm[17] = -1; /* Output: Number of nonzeros in the factor LU */
   // iparm[18] = -1; /* Output: Mflops for LU factorization */
   // iparm[19] = 0;  /* Output: Numbers of CG Iterations */
-  MKL_INT ia[5] = {0, 3, 6, 9, 12};
-  MKL_INT ja[12] = {0, 1, 2, 0, 1, 3, 0, 2, 3, 1, 2, 3};
+  MKL_INT ia[5] = {0, 3, 5, 7, 8};
+  MKL_INT ja[8] = {0, 1, 2, 1, 3, 2, 3, 3};
   for (i = 0; i < 5; i++) {
     ia[i] = ia[i] + 1;
   }
   for (i = 0; i < 12; i++) {
     ja[i] = ja[i] + 1;
   }
-  float a[12] = {36, -9, -9, -9, 36, -9, -9, 36, -9, -9, -9, 36};
+  double a[8] = {36, -9, -9, 36, -9, 36, -9, 36};
   MKL_INT error;
 
   double ddum;
-  pardiso(pt, &maxfct, &mnum, &mtype, &phase, &n, a, ia, ja, &idum, &nrhs,
-          iparm, &msglv1, &rhs[0], &sol[0], &error);
+  // pardiso(pt, &maxfct, &mnum, &mtype, &phase, &n, val, rows_start, col_index, &idum, &nrhs,
+  //         iparm, &msglv1, &rhs[0], &sol[0], &error);
   for (i = 0; i < 4; i++) {
     printf("%f ", rhs[i]);
   }

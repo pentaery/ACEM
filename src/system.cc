@@ -3,8 +3,8 @@
 #include <cmath>
 #include <cstdio>
 
-void formRHS(std::vector<float> &vec, MKL_INT size) {
-  float gridLength = 1.0 / (size + 1);
+void formRHS(std::vector<double> &vec, MKL_INT size) {
+  double gridLength = 1.0 / (size + 1);
   MKL_INT row = 0, col = 0;
   for (row = 0; row < size; ++row) {
     for (col = 0; col < size; ++col) {
@@ -18,27 +18,17 @@ void formRHS(std::vector<float> &vec, MKL_INT size) {
 void formA(sparse_matrix_t &A, MKL_INT size) {
   std::vector<MKL_INT> row_indx;
   std::vector<MKL_INT> col_indx;
-  std::vector<float> values;
-  float gridLength = 1.0 / (size + 1);
+  std::vector<double> values;
+  double gridLength = 1.0 / (size + 1);
   MKL_INT row = 0, col = 0;
   for (row = 0; row < size; ++row) {
     for (col = 0; col < size; ++col) {
       row_indx.push_back(row * size + col);
       col_indx.push_back(row * size + col);
       values.push_back(4.0 / gridLength / gridLength);
-      if (row > 0) {
-        row_indx.push_back(row * size + col);
-        col_indx.push_back((row - 1) * size + col);
-        values.push_back(-1.0 / gridLength / gridLength);
-      }
       if (row < size - 1) {
         row_indx.push_back(row * size + col);
         col_indx.push_back((row + 1) * size + col);
-        values.push_back(-1.0 / gridLength / gridLength);
-      }
-      if (col > 0) {
-        row_indx.push_back(row * size + col);
-        col_indx.push_back(row * size + col - 1);
         values.push_back(-1.0 / gridLength / gridLength);
       }
       if (col < size - 1) {
@@ -50,7 +40,7 @@ void formA(sparse_matrix_t &A, MKL_INT size) {
   }
   printf("size: %ld\n", values.size());
   sparse_matrix_t B;
-  mkl_sparse_s_create_coo(&B, SPARSE_INDEX_BASE_ZERO, size * size, size * size,
+  mkl_sparse_d_create_coo(&B, SPARSE_INDEX_BASE_ZERO, size * size, size * size,
                           values.size(), &row_indx[0], &col_indx[0],
                           &values[0]);
 
