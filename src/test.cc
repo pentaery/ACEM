@@ -7,7 +7,8 @@
 #include <vector>
 
 int main() {
-  int size = 3;
+  auto start = std::chrono::high_resolution_clock::now();
+  int size = 512;
   sparse_status_t status;
   std::vector<double> rhs(size * size);
   std::vector<double> sol(size * size);
@@ -82,6 +83,8 @@ int main() {
   for (i = 0; i < 9; i++) {
     printf("%f ", sol[i]);
   }
-
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> duration = end - start;
+  printf("Time elapsed: %f ms\n", duration.count());
   return 0;
 }
