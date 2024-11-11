@@ -135,6 +135,7 @@ MKL_INT main(void) {
   /* -------------------------------------------------------------------- */
   phase = 33;
   iparm[7] = 2; /* Max numbers of iterative refinement steps. */
+
   /* Set right hand side to one. */
   for (i = 0; i < n; i++) {
     b[i] = 1;

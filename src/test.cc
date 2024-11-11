@@ -7,17 +7,16 @@
 #include <vector>
 
 int main() {
-  clock_t start = clock();
-  int size = 2;
+  int size = 3;
   sparse_status_t status;
-  std::vector<double> rhs(8);
-  std::vector<double> sol(8);
+  std::vector<double> rhs(size * size);
+  std::vector<double> sol(size * size);
   formRHS(rhs, size);
 
   sparse_matrix_t A;
   formA(A, size);
 
-  sparse_index_base_t indexing = SPARSE_INDEX_BASE_ONE;
+  sparse_index_base_t indexing = SPARSE_INDEX_BASE_ZERO;
   int rows, cols;
   int *rows_start, *rows_end, *col_index;
   double *val;
@@ -27,23 +26,9 @@ int main() {
                           &col_index, &val);
 
   rows_start[size * size] = rows_end[size * size - 1];
-  // printf("lastcol: %d\n", rows_start[size * size - 1]);
   printf("exportcsr\n");
-  int i = 0;
-  for (i = 0; i < 12; i++) {
-    printf("%f ", val[i]);
-  }
-  printf("\n");
-  for (i = 0; i < 12; i++) {
-    // col_index[i] = col_index[i] + 1;
-    printf("%d ", col_index[i]);
-  }
-  printf("\n");
-  for (i = 0; i < 5; i++) {
-    // rows_start[i] = rows_start[i] + 1;
-    printf("%d ", rows_start[i]);
-  }
 
+  int i;
   void *pt[64];
   for (i = 0; i < 64; i++) {
     pt[i] = 0;
@@ -56,7 +41,8 @@ int main() {
   for (i = 0; i < 64; i++) {
     iparm[i] = 0;
   }
-  // iparm[0] = 1;  /* No solver default */
+  iparm[34] = 1;
+  iparm[0] = 1; /* No solver default */
   // iparm[1] = 2;  /* Fill-in reordering from METIS */
   // iparm[3] = 0;  /* No iterative-direct algorithm */
   // iparm[4] = 0;  /* No user fill-in reducing permutation */
@@ -78,29 +64,24 @@ int main() {
   // iparm[17] = -1; /* Output: Number of nonzeros in the factor LU */
   // iparm[18] = -1; /* Output: Mflops for LU factorization */
   // iparm[19] = 0;  /* Output: Numbers of CG Iterations */
-  MKL_INT ia[5] = {0, 3, 5, 7, 8};
-  MKL_INT ja[8] = {0, 1, 2, 1, 3, 2, 3, 3};
-  for (i = 0; i < 5; i++) {
-    ia[i] = ia[i] + 1;
-  }
-  for (i = 0; i < 12; i++) {
-    ja[i] = ja[i] + 1;
-  }
-  double a[8] = {36, -9, -9, 36, -9, 36, -9, 36};
+  // for (i = 0; i < size * size + 1; i++) {
+  //   rows_start[i] = rows_start[i] + 1;
+  // }
+  // for (i = 0; i < non_zero_count; i++) {
+  //   col_index[i] = col_index[i] + 1;
+  // }
   MKL_INT error;
 
   double ddum;
-  // pardiso(pt, &maxfct, &mnum, &mtype, &phase, &n, val, rows_start, col_index, &idum, &nrhs,
-  //         iparm, &msglv1, &rhs[0], &sol[0], &error);
-  for (i = 0; i < 4; i++) {
+  pardiso(pt, &maxfct, &mnum, &mtype, &phase, &n, val, rows_start, col_index,
+          &idum, &nrhs, iparm, &msglv1, rhs.data(), sol.data(), &error);
+  for (i = 0; i < 9; i++) {
     printf("%f ", rhs[i]);
   }
   printf("\n");
-  for (i = 0; i < 4; i++) {
+  for (i = 0; i < 9; i++) {
     printf("%f ", sol[i]);
   }
-  printf("\n");
-  clock_t end = clock();
-  printf("Time: %f\n", (double)(end - start) / CLOCKS_PER_SEC);
+
   return 0;
 }
