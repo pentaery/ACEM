@@ -2,6 +2,7 @@
 #include "mkl_spblas.h"
 #include <cmath>
 #include <cstdio>
+#include <iostream>
 
 void System::formRHS() {
   rhs.resize(size * size);
@@ -38,27 +39,15 @@ void System::formA() {
   }
   printf("size: %ld\n", values.size());
   sparse_matrix_t B;
-  mkl_sparse_d_create_coo(&B, indexing, size * size, size * size,
-                          values.size(), row_indx.data(), col_indx.data(),
-                          values.data());
+  mkl_sparse_d_create_coo(&B, indexing, size * size, size * size, values.size(),
+                          row_indx.data(), col_indx.data(), values.data());
 
   mkl_sparse_convert_csr(B, SPARSE_OPERATION_NON_TRANSPOSE, &A);
 
   mkl_sparse_d_export_csr(A, &indexing, &rows, &cols, &rows_start, &rows_end,
                           &col_index, &val);
   rows_start[size * size] = rows_end[size * size - 1];
-  int i = 0;
-  for(i = 0; i < 8; i++) {
-    printf("%f ", val[i]);
-  }
-  printf("\n");
-  for(i = 0; i < 8; i++) {
-    printf("%d ", col_index[i]);
-  }
-  printf("\n");
-  for(i = 0; i < 5; i++) {
-    printf("%d ", rows_start[i]);
-  }
+
   printf("exportcsr\n");
 }
 
@@ -72,6 +61,7 @@ System::System() {
   }
   iparm[34] = 1;
   iparm[0] = 1;
+  sol.resize(size * size);
 }
 
 System::System(int size) {
@@ -88,6 +78,7 @@ System::System(int size) {
 }
 
 void System::solve() {
+
   MKL_INT error;
 
   MKL_INT maxfct = 1, mnum = 1, mtype = 2, phase = 13;
@@ -97,13 +88,11 @@ void System::solve() {
   MKL_INT idum;
   printf("iparm[0]: %d\n", iparm[0]);
   printf("iparm[34]: %d\n", iparm[34]);
+  std::cout<<sol.data()<<std::endl;
   pardiso(pt, &maxfct, &mnum, &mtype, &phase, &n, val, rows_start, col_index,
           perm, &nrhs, iparm, &msglv1, rhs.data(), sol.data(), &error);
+  printf("error: %d\n", error);
 }
-
-
-
-
 
 void formRHS(std::vector<double> &vec, MKL_INT size) {
   double gridLength = 1.0 / (size + 1);
