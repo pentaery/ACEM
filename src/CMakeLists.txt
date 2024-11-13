@@ -7,9 +7,11 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(MKL REQUIRED IMPORTED_TARGET mkl-dynamic-lp64-iomp)
 
 
-add_executable(test testc.cc system.cc)
+# add_executable(test poisson2d.cc system.cc)
+add_executable(test metis.cc)
 
 target_link_libraries(test /home/pentaery/local/lib/libmetis.so)
+target_link_libraries(test /home/pentaery/local/lib/libGKlib.a)
 if(OpenMP_CXX_FOUND)
     target_link_libraries(test OpenMP::OpenMP_CXX)
 endif()
