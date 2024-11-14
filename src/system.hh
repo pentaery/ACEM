@@ -16,6 +16,7 @@ class System {
   MKL_INT *rows_start, *rows_end, *col_index;
   double *val;
   MKL_INT size;
+  MKL_INT nvtxs;
 
   MKL_INT perm[64], iparm[64];
   void *pt[64];
@@ -24,6 +25,7 @@ public:
   void formRHS();
   void formA();
   void solve();
+  void graphPartition();
   System();
   System(MKL_INT size);
 };

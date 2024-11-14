@@ -4,16 +4,16 @@
 #include <bits/types/clock_t.h>
 #include <chrono>
 #include <cstdio>
-#include <vector>
 #include <metis.h>
+#include <vector>
 
 int main() {
   auto start = std::chrono::high_resolution_clock::now();
 
-  System sys(600);
+  System sys(1024);
   sys.formRHS();
   sys.formA();
-  sys.solve();
+  // sys.solve();
 
   auto end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> duration = end - start;
