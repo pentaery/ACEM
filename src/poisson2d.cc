@@ -10,9 +10,11 @@
 int main() {
   auto start = std::chrono::high_resolution_clock::now();
 
-  System sys(1024);
-  sys.formRHS();
-  sys.formA();
+  System sys(512);
+  sys.getL();
+  sys.graphPartition();
+  // sys.formRHS();
+  // sys.formA();
   // sys.solve();
 
   auto end = std::chrono::high_resolution_clock::now();

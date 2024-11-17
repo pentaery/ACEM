@@ -5,15 +5,14 @@
 #include <vector>
 
 class System {
-  sparse_matrix_t A;
-  std::vector<double> rhs;
-  std::vector<double> sol;
-  std::vector<MKL_INT> row_indx;
-  std::vector<MKL_INT> col_indx;
-  std::vector<double> values;
+  sparse_matrix_t matA;
+  sparse_matrix_t matL;
+  std::vector<double> vecRHS;
+  std::vector<double> vecSOL;
+  std::vector<double> matM;
   sparse_index_base_t indexing;
   MKL_INT rows, cols;
-  MKL_INT *rows_start, *rows_end, *col_index;
+
   double *val;
   MKL_INT size;
   MKL_INT nvtxs;
@@ -22,6 +21,8 @@ class System {
   void *pt[64];
 
 public:
+  void getL();
+  void getM();
   void formRHS();
   void formA();
   void solve();
