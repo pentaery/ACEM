@@ -21,8 +21,7 @@ class System {
   void *pt[64];
 
 public:
-  void getL();
-  void getM();
+  void getData();
   void formRHS();
   void formA();
   void solve();

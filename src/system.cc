@@ -2,11 +2,12 @@
 #include <cstdio>
 #include <iostream>
 #include <metis.h>
+#include <vector>
 
 void System::formRHS() {
-  double gridLength = 1.0 / (size + 1);
-  for (MKL_INT row = 0; row < size; ++row) {
-    for (MKL_INT col = 0; col < size; ++col) {
+  double gridLength = 1.0 / (size - 1);
+  for (int row = 0; row < size; ++row) {
+    for (int col = 0; col < size; ++col) {
       vecRHS[row * size + col] = 2 * M_PI * M_PI *
                                  sin(M_PI * (row + 1) * gridLength) *
                                  sin(M_PI * (col + 1) * gridLength);
@@ -14,7 +15,7 @@ void System::formRHS() {
   }
 }
 
-void System::getL() {
+void System::getData() {
   std::vector<MKL_INT> row_indx;
   std::vector<MKL_INT> col_indx;
   std::vector<double> values;
@@ -22,6 +23,9 @@ void System::getL() {
   for (MKL_INT row = 0; row < size; ++row) {
     for (MKL_INT col = 0; col < size; ++col) {
       MKL_INT index = row * size + col;
+      row_indx.push_back(index);
+      col_indx.push_back(index);
+      values.push_back(0.0);
       if (row > 0) {
         row_indx.push_back(index);
         col_indx.push_back((row - 1) * size + col);
@@ -45,22 +49,16 @@ void System::getL() {
     }
   }
   std::cout << "non-zero elements in L: " << values.size() << std::endl;
-
-  sparse_matrix_t matB;
-  mkl_sparse_d_create_coo(&matB, indexing, size * size, size * size,
-                          values.size(), row_indx.data(), col_indx.data(),
-                          values.data());
-  mkl_sparse_convert_csr(matB, SPARSE_OPERATION_NON_TRANSPOSE, &matL);
-}
-
-
-void System::getM() {
-  double gridLength = 1.0 / (size - 1);
-  for (MKL_INT row = 0; row < size; ++row) {
-    for (MKL_INT col = 0; col < size; ++col) {
-      matM[row * size + col] = 0.0;
-    }
+  int i;
+  for (i = 0; i < values.size(); ++i) {
+    std::cout << row_indx[i] << " " << col_indx[i] << " " << values[i]
+              << std::endl;
   }
+  sparse_matrix_t matB;
+  mkl_sparse_d_create_coo(&matB, indexing, nvtxs, nvtxs, values.size(),
+                          row_indx.data(), col_indx.data(), values.data());
+  mkl_sparse_convert_csr(matB, SPARSE_OPERATION_NON_TRANSPOSE, &matL);
+  mkl_sparse_destroy(matB);
 }
 
 void System::graphPartition() {
@@ -70,7 +68,7 @@ void System::graphPartition() {
   rows_start[size * size] = rows_end[size * size - 1];
 
   idx_t ncon = 1;
-  idx_t nparts = 20;
+  idx_t nparts = 2;
   idx_t objval;
   idx_t part[nvtxs];
   idx_t options[METIS_NOPTIONS];
@@ -93,15 +91,61 @@ void System::graphPartition() {
 
 void System::formA() {
   MKL_INT *rows_start, *rows_end, *col_index;
+  MKL_INT rows, cols;
+  sparse_index_base_t indexing;
   mkl_sparse_d_export_csr(matL, &indexing, &rows, &cols, &rows_start, &rows_end,
                           &col_index, &val);
-  int i = 0;
-  for(i = 0; i < nvtxs; ++i) {
-    
+  std::vector<MKL_INT> A_row_index;
+  std::vector<MKL_INT> A_col_index;
+  std::vector<double> A_values;
+  int i = 0, j = 0;
+  double diagnal = 0.0;
+  for (i = 0; i < nvtxs; ++i) {
+    diagnal = 0.0;
+    for (j = rows_start[i]; j < rows_end[i]; ++j) {
+      if (col_index[j] > i) {
+        A_row_index.push_back(i);
+        A_col_index.push_back(col_index[j]);
+        A_values.push_back(-val[j]);
+        diagnal += val[j];
+      } else {
+        diagnal += val[j];
+      }
+    }
+    A_row_index.push_back(i);
+    A_col_index.push_back(i);
+    A_values.push_back(diagnal);
   }
+  std::cout << "non-zero elements in A: " << A_values.size() << std::endl;
+  for (i = 0; i < A_values.size(); ++i) {
+    std::cout << A_row_index[i] << " " << A_col_index[i] << " " << A_values[i]
+              << std::endl;
+  }
+  sparse_matrix_t matB;
+  mkl_sparse_d_create_coo(&matB, indexing, nvtxs, nvtxs, A_values.size(),
+                          A_row_index.data(), A_col_index.data(),
+                          A_values.data());
+  mkl_sparse_convert_csr(matB, SPARSE_OPERATION_NON_TRANSPOSE, &matA);
+  mkl_sparse_destroy(matB);
 }
 
+void System::solve() {
+  MKL_INT *rows_start, *rows_end, *col_index;
+  mkl_sparse_d_export_csr(matA, &indexing, &rows, &cols, &rows_start, &rows_end,
+                          &col_index, &val);
+  rows_start[nvtxs] = rows_end[nvtxs - 1];
 
+  MKL_INT error;
+
+  MKL_INT maxfct = 1, mnum = 1, mtype = 2, phase = 13;
+  MKL_INT nrhs = 1, msglv1 = 1;
+
+  MKL_INT idum;
+  pardiso(pt, &maxfct, &mnum, &mtype, &phase, &nvtxs, val, rows_start,
+          col_index, perm, &nrhs, iparm, &msglv1, vecRHS.data(), vecSOL.data(),
+          &error);
+  printf("error: %d\n", error);
+}
 
 System::System() {
   size = 512;
@@ -137,21 +181,6 @@ System::System(int size) : System() {
   vecSOL.resize(size * size);
   vecRHS.resize(size * size);
   matM.resize(size * size);
-}
-
-void System::solve() {
-  MKL_INT *rows_start, *rows_end, *col_index;
-
-  MKL_INT error;
-
-  MKL_INT maxfct = 1, mnum = 1, mtype = 2, phase = 13;
-  MKL_INT nrhs = 1, msglv1 = 1;
-
-  MKL_INT idum;
-  pardiso(pt, &maxfct, &mnum, &mtype, &phase, &nvtxs, val, rows_start,
-          col_index, perm, &nrhs, iparm, &msglv1, vecRHS.data(), vecSOL.data(),
-          &error);
-  printf("error: %d\n", error);
 }
 
 // void System::formA() {
