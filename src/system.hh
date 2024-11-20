@@ -2,6 +2,7 @@
 #include "mkl_spblas.h"
 #include "mkl_types.h"
 #include <cmath>
+#include <metis.h>
 #include <vector>
 
 class System {
@@ -20,12 +21,17 @@ class System {
   MKL_INT perm[64], iparm[64];
   void *pt[64];
 
+  idx_t nparts;
+  idx_t *part;
+
 public:
   void getData();
   void formRHS();
   void formA();
   void solve();
   void graphPartition();
+  void formAUX();
   System();
   System(MKL_INT size);
+  System(MKL_INT size, idx_t nparts);
 };

@@ -1,7 +1,7 @@
 #include "system.hh"
 #include <cstdio>
 #include <iostream>
-#include <metis.h>
+
 #include <vector>
 
 void System::formRHS() {
@@ -23,9 +23,19 @@ void System::getData() {
   for (MKL_INT row = 0; row < size; ++row) {
     for (MKL_INT col = 0; col < size; ++col) {
       MKL_INT index = row * size + col;
-      row_indx.push_back(index);
-      col_indx.push_back(index);
-      values.push_back(0.0);
+      if (col + row == 0 || col + row == 2 * size - 2) {
+        row_indx.push_back(index);
+        col_indx.push_back(index);
+        values.push_back(2.0);
+      } else if (col + row == size - 1) {
+        row_indx.push_back(index);
+        col_indx.push_back(index);
+        values.push_back(1.0);
+      } else {
+        row_indx.push_back(index);
+        col_indx.push_back(index);
+        values.push_back(0.0);
+      }
       if (row > 0) {
         row_indx.push_back(index);
         col_indx.push_back((row - 1) * size + col);
@@ -49,11 +59,11 @@ void System::getData() {
     }
   }
   std::cout << "non-zero elements in L: " << values.size() << std::endl;
-  int i;
-  for (i = 0; i < values.size(); ++i) {
-    std::cout << row_indx[i] << " " << col_indx[i] << " " << values[i]
-              << std::endl;
-  }
+  // int i;
+  // for (i = 0; i < values.size(); ++i) {
+  //   std::cout << row_indx[i] << " " << col_indx[i] << " " << values[i]
+  //             << std::endl;
+  // }
   sparse_matrix_t matB;
   mkl_sparse_d_create_coo(&matB, indexing, nvtxs, nvtxs, values.size(),
                           row_indx.data(), col_indx.data(), values.data());
@@ -68,9 +78,7 @@ void System::graphPartition() {
   rows_start[size * size] = rows_end[size * size - 1];
 
   idx_t ncon = 1;
-  idx_t nparts = 2;
   idx_t objval;
-  idx_t part[nvtxs];
   idx_t options[METIS_NOPTIONS];
   options[METIS_OPTION_OBJTYPE] = METIS_OBJTYPE_VOL;
   options[METIS_OPTION_NCUTS] = 1;
@@ -117,10 +125,11 @@ void System::formA() {
     A_values.push_back(diagnal);
   }
   std::cout << "non-zero elements in A: " << A_values.size() << std::endl;
-  for (i = 0; i < A_values.size(); ++i) {
-    std::cout << A_row_index[i] << " " << A_col_index[i] << " " << A_values[i]
-              << std::endl;
-  }
+  // for (i = 0; i < A_values.size(); ++i) {
+  //   std::cout << A_row_index[i] << " " << A_col_index[i] << " " <<
+  //   A_values[i]
+  //             << std::endl;
+  // }
   sparse_matrix_t matB;
   mkl_sparse_d_create_coo(&matB, indexing, nvtxs, nvtxs, A_values.size(),
                           A_row_index.data(), A_col_index.data(),
@@ -147,6 +156,24 @@ void System::solve() {
   printf("error: %d\n", error);
 }
 
+void System::formAUX() {
+  char which = 'L';
+  MKL_INT pm[128];
+  for (int i = 0; i < 128; ++i) {
+    pm[i] = 0;
+  }
+  pm[1] = 6;
+
+
+  for(int i = 0; i < nvtxs; ++i) {
+    
+  }
+
+  // mkl_sparse_d_gv(&which, int *pm, sparse_matrix_t A, struct matrix_descr
+  // descrA, sparse_matrix_t B, struct matrix_descr descrB, int k0, int *k,
+  // double *E, double *X, double *res)
+}
+
 System::System() {
   size = 512;
   indexing = SPARSE_INDEX_BASE_ZERO;
@@ -163,9 +190,11 @@ System::System() {
   vecSOL.resize(size * size);
   vecRHS.resize(size * size);
   matM.resize(size * size);
+  nparts = 10;
+  part = new int[nvtxs];
 }
 
-System::System(int size) : System() {
+System::System(MKL_INT size) {
   this->size = size;
   indexing = SPARSE_INDEX_BASE_ZERO;
   int i;
@@ -181,78 +210,30 @@ System::System(int size) : System() {
   vecSOL.resize(size * size);
   vecRHS.resize(size * size);
   matM.resize(size * size);
+  nparts = 10;
+  part = new int[nvtxs];
 }
 
-// void System::formA() {
-//   double gridLength = 1.0 / (size + 1);
-//   std::vector<MKL_INT> row_indx;
-//   std::vector<MKL_INT> col_indx;
-//   std::vector<double> values;
-//   MKL_INT *rows_start, *rows_end, *col_index;
+System::System(MKL_INT size, idx_t nparts) {
+  this->size = size;
+  this->nparts = nparts;
+  indexing = SPARSE_INDEX_BASE_ZERO;
+  int i;
+  for (i = 0; i < 64; i++) {
+    pt[i] = 0;
+  }
+  for (i = 0; i < 64; i++) {
+    iparm[i] = 0;
+  }
+  iparm[34] = 1;
+  iparm[0] = 1;
+  nvtxs = size * size;
+  vecSOL.resize(size * size);
+  vecRHS.resize(size * size);
+  matM.resize(size * size);
+  part = new int[nvtxs];
+}
 
-//   for (MKL_INT row = 0; row < size; ++row) {
-//     for (MKL_INT col = 0; col < size; ++col) {
-//       MKL_INT index = row * size + col;
-//       row_indx.push_back(index);
-//       col_indx.push_back(index);
-//       values.push_back(4.0 / (gridLength * gridLength));
-//       // if (row > 0) {
-//       //   row_indx.push_back(index);
-//       //   col_indx.push_back((row - 1) * size + col);
-//       //   values.push_back(-1.0 / (gridLength * gridLength));
-//       // }
-//       if (row < size - 1) {
-//         row_indx.push_back(index);
-//         col_indx.push_back((row + 1) * size + col);
-//         values.push_back(-1.0 / (gridLength * gridLength));
-//       }
-//       // if (col > 0) {
-//       //   row_indx.push_back(index);
-//       //   col_indx.push_back(index - 1);
-//       //   values.push_back(-1.0 / (gridLength * gridLength));
-//       // }
-//       if (col < size - 1) {
-//         row_indx.push_back(index);
-//         col_indx.push_back(index + 1);
-//         values.push_back(-1.0 / (gridLength * gridLength));
-//       }
-//     }
-//   }
-//   printf("size: %ld\n", values.size());
-//   sparse_matrix_t matB;
-//   mkl_sparse_d_create_coo(&matB, indexing, size * size, size * size,
-//                           values.size(), row_indx.data(), col_indx.data(),
-//                           values.data());
-
-//   mkl_sparse_convert_csr(matB, SPARSE_OPERATION_NON_TRANSPOSE, &matA);
-
-//   mkl_sparse_d_export_csr(matA, &indexing, &rows, &cols, &rows_start,
-//   &rows_end,
-//                           &col_index, &val);
-//   rows_start[size * size] = rows_end[size * size - 1];
-
-//   int i;
-
-//   printf("exportcsr\n");
-
-//   idx_t ncon = 1;
-//   idx_t nparts = 10;
-//   idx_t objval;
-//   idx_t part[nvtxs];
-//   idx_t options[METIS_NOPTIONS];
-//   options[METIS_OPTION_OBJTYPE] = METIS_OBJTYPE_VOL;
-//   options[METIS_OPTION_NCUTS] = 1;
-//   METIS_PartGraphKway(&nvtxs, &ncon, rows_start, col_index, NULL, NULL, NULL,
-//                       &nparts, NULL, NULL, NULL, &objval, part);
-//   printf("Finish partitioning with objval %d\n", objval);
-
-//   FILE *fp;
-//   if ((fp = fopen("../../partition.txt", "wb")) == NULL) {
-//     printf("cant open the file");
-//     exit(0);
-//   }
-
-//   for (i = 0; i < nvtxs; i++) {
 //     fprintf(fp, "%d ", part[i]);
 //   }
 //   fclose(fp);

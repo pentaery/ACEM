@@ -12,7 +12,7 @@ int main() {
 
 
   
-  System sys(4);
+  System sys(512);
   sys.getData();
   sys.graphPartition();
   sys.formRHS();
