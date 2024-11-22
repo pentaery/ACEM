@@ -3,6 +3,7 @@
 #include "mkl_types.h"
 #include <cmath>
 #include <metis.h>
+#include <set>
 #include <unordered_set>
 #include <vector>
 
@@ -25,8 +26,11 @@ class System {
   idx_t nparts;
   idx_t *part;
 
-  std::vector<std::unordered_set<idx_t>> vertices;
+  std::vector<std::set<idx_t>> vertices;
   std::vector<std::unordered_set<idx_t>> neighbours;
+  std::vector<std::unordered_set<idx_t>> overlapping;
+
+  int overlap;
 
 public:
   void getData();
@@ -39,4 +43,5 @@ public:
   System();
   System(MKL_INT size);
   System(MKL_INT size, idx_t nparts);
+  System(MKL_INT size, idx_t nparts, int overlap);
 };

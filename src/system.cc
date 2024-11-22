@@ -108,21 +108,37 @@ void System::formA() {
   std::vector<double> A_values;
   int i = 0, j = 0;
   double diagnal = 0.0;
+  // for (i = 0; i < nvtxs; ++i) {
+  //   diagnal = 0.0;
+  //   for (j = rows_start[i]; j < rows_end[i]; ++j) {
+  //     if (col_index[j] > i) {
+  //       A_row_index.push_back(i);
+  //       A_col_index.push_back(col_index[j]);
+  //       A_values.push_back(-val[j]);
+  //       diagnal += val[j];
+  //     } else {
+  //       diagnal += val[j];
+  //     }
+  //   }
+  //   A_row_index.push_back(i);
+  //   A_col_index.push_back(i);
+  //   A_values.push_back(diagnal);
+  // }
   for (i = 0; i < nvtxs; ++i) {
-    diagnal = 0.0;
     for (j = rows_start[i]; j < rows_end[i]; ++j) {
-      if (col_index[j] > i) {
+      if (i != col_index[j]) {
+        A_row_index.push_back(i);
+        A_col_index.push_back(i);
+        A_values.push_back(val[j]);
         A_row_index.push_back(i);
         A_col_index.push_back(col_index[j]);
         A_values.push_back(-val[j]);
-        diagnal += val[j];
       } else {
-        diagnal += val[j];
+        A_row_index.push_back(i);
+        A_col_index.push_back(i);
+        A_values.push_back(val[j]);
       }
     }
-    A_row_index.push_back(i);
-    A_col_index.push_back(i);
-    A_values.push_back(diagnal);
   }
   std::cout << "non-zero elements in A: " << A_values.size() << std::endl;
   // for (i = 0; i < A_values.size(); ++i) {
@@ -142,6 +158,22 @@ void System::solve() {
   MKL_INT *rows_start, *rows_end, *col_index;
   mkl_sparse_d_export_csr(matA, &indexing, &rows, &cols, &rows_start, &rows_end,
                           &col_index, &val);
+  for (int i = 0; i < 30; ++i) {
+    std::cout << rows_start[i] << " ";
+  }
+  std::cout << std::endl;
+  for (int i = 0; i < 30; ++i) {
+    std::cout << rows_end[i] << " ";
+  }
+  std::cout << std::endl;
+  for (int i = 0; i < 30; ++i) {
+    std::cout << col_index[i] << " ";
+  }
+  std::cout << std::endl;
+  for (int i = 0; i < 30; ++i) {
+    std::cout << val[i] << " ";
+  }
+  std::cout << std::endl;
   rows_start[nvtxs] = rows_end[nvtxs - 1];
 
   MKL_INT error;
@@ -157,35 +189,61 @@ void System::solve() {
 }
 
 void System::findNeighbours() {
-  int i = 0;
+  int i = 0, j = 0;
   for (i = 0; i < nvtxs; ++i) {
     vertices[part[i]].insert(i);
   }
   MKL_INT *rows_start, *rows_end, *col_index;
   mkl_sparse_d_export_csr(matL, &indexing, &rows, &cols, &rows_start, &rows_end,
                           &col_index, &val);
-  for(i = 0; i < nvtxs; ++i) {
-    for(int j = rows_start[i]; j < rows_end[i]; ++j) {
-      if(part[i] != part[col_index[j]]) {
+  for (i = 0; i < nvtxs; ++i) {
+    for (j = rows_start[i]; j < rows_end[i]; ++j) {
+      if (part[i] != part[col_index[j]]) {
         neighbours[part[i]].insert(part[col_index[j]]);
       }
     }
   }
+  for (i = 0; i < overlap; ++i) {
+    for (j = 0; j < nparts; ++j) {
+      if (i == 0) {
+        overlapping[j].insert(neighbours[j].begin(), neighbours[j].end());
+      } else {
+        for (const auto &element : overlapping[j]) {
+          overlapping[j].insert(neighbours[element].begin(),
+                                neighbours[element].end());
+        }
+      }
+    }
+  }
+  // for (const auto &element : overlapping[0]) {
+  //   std::cout << element << " ";
+  // }
+  // std::cout << std::endl;
 }
 
-
-
 void System::formAUX() {
+  MKL_INT *rows_start, *rows_end, *col_index;
+  MKL_INT rows, cols;
+  sparse_index_base_t indexing;
+  mkl_sparse_d_export_csr(matL, &indexing, &rows, &cols, &rows_start, &rows_end,
+                          &col_index, &val);
+
   char which = 'L';
   MKL_INT pm[128];
-  for (int i = 0; i < 128; ++i) {
+  int i = 0, j = 0;
+  for (i = 0; i < 128; ++i) {
     pm[i] = 0;
   }
   pm[1] = 6;
 
-
-  for(int i = 0; i < nvtxs; ++i) {
-    
+  for (i = 0; i < nparts; ++i) {
+    for (const auto &element : vertices[i]) {
+      for (j = rows_start[element]; j < rows_end[element]; ++j) {
+        if (part[element] == part[col_index[j]]) {
+          pm[element] += 1;
+        }
+      }
+    }
   }
 
   // mkl_sparse_d_gv(&which, int *pm, sparse_matrix_t A, struct matrix_descr
@@ -209,10 +267,12 @@ System::System() {
   vecSOL.resize(size * size);
   vecRHS.resize(size * size);
   matM.resize(size * size);
-  nparts = 4;
+  nparts = 10;
   part = new int[nvtxs];
   vertices.resize(nparts);
   neighbours.resize(nparts);
+  overlapping.resize(nparts);
+  overlap = 2;
 }
 
 System::System(MKL_INT size) {
@@ -231,10 +291,12 @@ System::System(MKL_INT size) {
   vecSOL.resize(size * size);
   vecRHS.resize(size * size);
   matM.resize(size * size);
-  nparts = 4;
+  nparts = 10;
   part = new int[nvtxs];
   vertices.resize(nparts);
   neighbours.resize(nparts);
+  overlapping.resize(nparts);
+  overlap = 2;
 }
 
 System::System(MKL_INT size, idx_t nparts) {
@@ -257,6 +319,32 @@ System::System(MKL_INT size, idx_t nparts) {
   part = new int[nvtxs];
   vertices.resize(nparts);
   neighbours.resize(nparts);
+  overlapping.resize(nparts);
+  overlap = 2;
+}
+
+System::System(MKL_INT size, idx_t nparts, int overlap) {
+  this->overlap = overlap;
+  this->size = size;
+  this->nparts = nparts;
+  indexing = SPARSE_INDEX_BASE_ZERO;
+  int i;
+  for (i = 0; i < 64; i++) {
+    pt[i] = 0;
+  }
+  for (i = 0; i < 64; i++) {
+    iparm[i] = 0;
+  }
+  iparm[34] = 1;
+  iparm[0] = 1;
+  nvtxs = size * size;
+  vecSOL.resize(size * size);
+  vecRHS.resize(size * size);
+  matM.resize(size * size);
+  part = new int[nvtxs];
+  vertices.resize(nparts);
+  neighbours.resize(nparts);
+  overlapping.resize(nparts);
 }
 
 //     fprintf(fp, "%d ", part[i]);
