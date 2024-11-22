@@ -12,13 +12,13 @@ int main() {
 
 
   
-  System sys(512);
+  System sys(4);
   sys.getData();
   sys.graphPartition();
-  sys.formRHS();
-  sys.formA();
-  sys.solve();
-
+  // sys.formRHS();
+  // sys.formA();
+  // sys.solve();
+  sys.findNeighbours();
 
 
 

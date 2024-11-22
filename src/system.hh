@@ -3,6 +3,7 @@
 #include "mkl_types.h"
 #include <cmath>
 #include <metis.h>
+#include <unordered_set>
 #include <vector>
 
 class System {
@@ -24,12 +25,16 @@ class System {
   idx_t nparts;
   idx_t *part;
 
+  std::vector<std::unordered_set<idx_t>> vertices;
+  std::vector<std::unordered_set<idx_t>> neighbours;
+
 public:
   void getData();
   void formRHS();
   void formA();
   void solve();
   void graphPartition();
+  void findNeighbours();
   void formAUX();
   System();
   System(MKL_INT size);

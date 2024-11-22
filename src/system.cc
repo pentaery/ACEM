@@ -156,6 +156,25 @@ void System::solve() {
   printf("error: %d\n", error);
 }
 
+void System::findNeighbours() {
+  int i = 0;
+  for (i = 0; i < nvtxs; ++i) {
+    vertices[part[i]].insert(i);
+  }
+  MKL_INT *rows_start, *rows_end, *col_index;
+  mkl_sparse_d_export_csr(matL, &indexing, &rows, &cols, &rows_start, &rows_end,
+                          &col_index, &val);
+  for(i = 0; i < nvtxs; ++i) {
+    for(int j = rows_start[i]; j < rows_end[i]; ++j) {
+      if(part[i] != part[col_index[j]]) {
+        neighbours[part[i]].insert(part[col_index[j]]);
+      }
+    }
+  }
+}
+
+
+
 void System::formAUX() {
   char which = 'L';
   MKL_INT pm[128];
@@ -190,8 +209,10 @@ System::System() {
   vecSOL.resize(size * size);
   vecRHS.resize(size * size);
   matM.resize(size * size);
-  nparts = 10;
+  nparts = 4;
   part = new int[nvtxs];
+  vertices.resize(nparts);
+  neighbours.resize(nparts);
 }
 
 System::System(MKL_INT size) {
@@ -210,8 +231,10 @@ System::System(MKL_INT size) {
   vecSOL.resize(size * size);
   vecRHS.resize(size * size);
   matM.resize(size * size);
-  nparts = 10;
+  nparts = 4;
   part = new int[nvtxs];
+  vertices.resize(nparts);
+  neighbours.resize(nparts);
 }
 
 System::System(MKL_INT size, idx_t nparts) {
@@ -232,6 +255,8 @@ System::System(MKL_INT size, idx_t nparts) {
   vecRHS.resize(size * size);
   matM.resize(size * size);
   part = new int[nvtxs];
+  vertices.resize(nparts);
+  neighbours.resize(nparts);
 }
 
 //     fprintf(fp, "%d ", part[i]);
