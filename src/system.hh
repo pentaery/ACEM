@@ -15,7 +15,7 @@ class System {
   std::vector<double> matM;
   sparse_index_base_t indexing;
   MKL_INT rows, cols;
-
+  
   double *val;
   MKL_INT size;
   MKL_INT nvtxs;
@@ -31,6 +31,7 @@ class System {
   std::vector<std::unordered_set<idx_t>> overlapping;
 
   int overlap;
+  double cStar;
 
 public:
   void getData();

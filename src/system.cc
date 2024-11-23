@@ -1,4 +1,5 @@
 #include "system.hh"
+#include "mkl_spblas.h"
 #include <cstdio>
 #include <iostream>
 
@@ -108,25 +109,13 @@ void System::formA() {
   std::vector<double> A_values;
   int i = 0, j = 0;
   double diagnal = 0.0;
-  // for (i = 0; i < nvtxs; ++i) {
-  //   diagnal = 0.0;
-  //   for (j = rows_start[i]; j < rows_end[i]; ++j) {
-  //     if (col_index[j] > i) {
-  //       A_row_index.push_back(i);
-  //       A_col_index.push_back(col_index[j]);
-  //       A_values.push_back(-val[j]);
-  //       diagnal += val[j];
-  //     } else {
-  //       diagnal += val[j];
-  //     }
-  //   }
-  //   A_row_index.push_back(i);
-  //   A_col_index.push_back(i);
-  //   A_values.push_back(diagnal);
-  // }
   for (i = 0; i < nvtxs; ++i) {
     for (j = rows_start[i]; j < rows_end[i]; ++j) {
-      if (i != col_index[j]) {
+      if (col_index[j] < i) {
+        A_row_index.push_back(i);
+        A_col_index.push_back(i);
+        A_values.push_back(val[j]);
+      } else if (col_index[j] > i) {
         A_row_index.push_back(i);
         A_col_index.push_back(i);
         A_values.push_back(val[j]);
@@ -140,12 +129,6 @@ void System::formA() {
       }
     }
   }
-  std::cout << "non-zero elements in A: " << A_values.size() << std::endl;
-  // for (i = 0; i < A_values.size(); ++i) {
-  //   std::cout << A_row_index[i] << " " << A_col_index[i] << " " <<
-  //   A_values[i]
-  //             << std::endl;
-  // }
   sparse_matrix_t matB;
   mkl_sparse_d_create_coo(&matB, indexing, nvtxs, nvtxs, A_values.size(),
                           A_row_index.data(), A_col_index.data(),
@@ -158,23 +141,6 @@ void System::solve() {
   MKL_INT *rows_start, *rows_end, *col_index;
   mkl_sparse_d_export_csr(matA, &indexing, &rows, &cols, &rows_start, &rows_end,
                           &col_index, &val);
-  for (int i = 0; i < 30; ++i) {
-    std::cout << rows_start[i] << " ";
-  }
-  std::cout << std::endl;
-  for (int i = 0; i < 30; ++i) {
-    std::cout << rows_end[i] << " ";
-  }
-  std::cout << std::endl;
-  for (int i = 0; i < 30; ++i) {
-    std::cout << col_index[i] << " ";
-  }
-  std::cout << std::endl;
-  for (int i = 0; i < 30; ++i) {
-    std::cout << val[i] << " ";
-  }
-  std::cout << std::endl;
-  rows_start[nvtxs] = rows_end[nvtxs - 1];
 
   MKL_INT error;
 
@@ -236,19 +202,75 @@ void System::formAUX() {
   }
   pm[1] = 6;
 
+  for (i = 0; i < nvtxs; ++i) {
+    std::cout << part[i] << "";
+  }
+  std::cout << std::endl;
+  std::cout << "nparts: " << nparts << std::endl;
+  
+  std::vector<MKL_INT> Ai_col_index[nparts];
+  std::vector<MKL_INT> Ai_row_index[nparts];
+  std::vector<double> Ai_values[nparts];
+  std::vector<MKL_INT> Si_col_index[nparts];
+  std::vector<MKL_INT> Si_row_index[nparts];
+  std::vector<double> Si_values[nparts];
+
   for (i = 0; i < nparts; ++i) {
-    for (const auto &element : vertices[i]) {
-      for (j = rows_start[element]; j < rows_end[element]; ++j) {
-        if (part[element] == part[col_index[j]]) {
-          pm[element] += 1;
+    for (j = rows_start[i]; j < rows_end[i]; ++j) {
+      if (part[i] == part[col_index[j]]) {
+        if (col_index[j] != i) {
+          Ai_row_index[part[i]].push_back(i);
+          Ai_col_index[part[i]].push_back(i);
+          Ai_values[part[i]].push_back(val[j]);
+          Ai_row_index[part[i]].push_back(i);
+          Ai_col_index[part[i]].push_back(col_index[j]);
+          Ai_values[part[i]].push_back(-val[j]);
+
+          Si_col_index[part[i]].push_back(i);
+          Si_row_index[part[i]].push_back(i);
+          Si_values[part[i]].push_back(val[j] / cStar / cStar / 2);
+        } else {
+          Ai_row_index[part[i]].push_back(i);
+          Ai_col_index[part[i]].push_back(i);
+          Ai_values[part[i]].push_back(val[j]);
+
+          Si_col_index[part[i]].push_back(i);
+          Si_row_index[part[i]].push_back(i);
+          Si_values[part[i]].push_back(val[j] / cStar / cStar);
         }
       }
     }
   }
 
-  // mkl_sparse_d_gv(&which, int *pm, sparse_matrix_t A, struct matrix_descr
-  // descrA, sparse_matrix_t B, struct matrix_descr descrB, int k0, int *k,
-  // double *E, double *X, double *res)
+  sparse_matrix_t Ai[nparts];
+  sparse_matrix_t Si[nparts];
+
+  int k0 = 4;
+  int k[nparts];
+  double E[nparts][k0];
+  double X[nparts][nvtxs];
+  double res[nparts];
+
+  matrix_descr descrA;
+  matrix_descr descrS;
+
+  descrA.type = SPARSE_MATRIX_TYPE_SYMMETRIC;
+  descrS.type = SPARSE_MATRIX_TYPE_SYMMETRIC;
+  descrA.mode = SPARSE_FILL_MODE_UPPER;
+  descrS.mode = SPARSE_FILL_MODE_UPPER;
+  descrA.diag = SPARSE_DIAG_NON_UNIT;
+  descrS.diag = SPARSE_DIAG_NON_UNIT;
+
+  for (i = 0; i < nparts; ++i) {
+    mkl_sparse_d_create_coo(&Ai[i], indexing, nvtxs, nvtxs, Ai_values[i].size(),
+                            Ai_row_index[i].data(), Ai_col_index[i].data(),
+                            Ai_values[i].data());
+    mkl_sparse_d_create_coo(&Si[i], indexing, nvtxs, nvtxs, Si_values[i].size(),
+                            Si_row_index[i].data(), Si_col_index[i].data(),
+                            Si_values[i].data());
+    mkl_sparse_d_gv(&which, pm, Ai[i], descrA, Si[i], descrS, k0, &k[i], E[i],
+                    X[i], &res[i]);
+  }
 }
 
 System::System() {
@@ -273,6 +295,7 @@ System::System() {
   neighbours.resize(nparts);
   overlapping.resize(nparts);
   overlap = 2;
+  cStar = 1.0;
 }
 
 System::System(MKL_INT size) {
@@ -297,6 +320,7 @@ System::System(MKL_INT size) {
   neighbours.resize(nparts);
   overlapping.resize(nparts);
   overlap = 2;
+  cStar = 1.0;
 }
 
 System::System(MKL_INT size, idx_t nparts) {
@@ -321,6 +345,7 @@ System::System(MKL_INT size, idx_t nparts) {
   neighbours.resize(nparts);
   overlapping.resize(nparts);
   overlap = 2;
+  cStar = 1.0;
 }
 
 System::System(MKL_INT size, idx_t nparts, int overlap) {
@@ -345,8 +370,8 @@ System::System(MKL_INT size, idx_t nparts, int overlap) {
   vertices.resize(nparts);
   neighbours.resize(nparts);
   overlapping.resize(nparts);
+  cStar = 1.0;
 }
-
 //     fprintf(fp, "%d ", part[i]);
 //   }
 //   fclose(fp);
