@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <iostream>
 
+#include <ostream>
 #include <vector>
 
 void System::formRHS() {
@@ -181,6 +182,18 @@ void System::findNeighbours() {
       }
     }
   }
+
+  globalTolocal.resize(nvtxs);
+
+  count.resize(nparts);
+  for (i = 0; i < nparts; ++i) {
+    count[i] = 0;
+  }
+  for (i = 0; i < nvtxs; ++i) {
+    globalTolocal[i] = count[part[i]];
+    count[part[i]]++;
+  }
+
   // for (const auto &element : overlapping[0]) {
   //   std::cout << element << " ";
   // }
@@ -193,83 +206,122 @@ void System::formAUX() {
   sparse_index_base_t indexing;
   mkl_sparse_d_export_csr(matL, &indexing, &rows, &cols, &rows_start, &rows_end,
                           &col_index, &val);
-
-  char which = 'L';
-  MKL_INT pm[128];
   int i = 0, j = 0;
+
+  char which = 'S';
+  MKL_INT pm[128];
+
   for (i = 0; i < 128; ++i) {
     pm[i] = 0;
   }
   pm[1] = 6;
-
-  for (i = 0; i < nvtxs; ++i) {
-    std::cout << part[i] << "";
-  }
-  std::cout << std::endl;
+  pm[2] = 1;
+  pm[3] = 10;
+  pm[4] = 10000;
+  pm[6] = 1;
+  // mkl_sparse_ee_init(pm);
   std::cout << "nparts: " << nparts << std::endl;
-  
+
   std::vector<MKL_INT> Ai_col_index[nparts];
   std::vector<MKL_INT> Ai_row_index[nparts];
   std::vector<double> Ai_values[nparts];
   std::vector<MKL_INT> Si_col_index[nparts];
   std::vector<MKL_INT> Si_row_index[nparts];
   std::vector<double> Si_values[nparts];
-
   for (i = 0; i < nparts; ++i) {
+    Ai_col_index[i].reserve(nvtxs);
+    Ai_row_index[i].reserve(nvtxs);
+    Ai_values[i].reserve(nvtxs);
+    Si_col_index[i].reserve(nvtxs);
+    Si_row_index[i].reserve(nvtxs);
+    Si_values[i].reserve(nvtxs);
+  }
+
+  for (i = 0; i < nvtxs; ++i) {
     for (j = rows_start[i]; j < rows_end[i]; ++j) {
       if (part[i] == part[col_index[j]]) {
         if (col_index[j] != i) {
-          Ai_row_index[part[i]].push_back(i);
-          Ai_col_index[part[i]].push_back(i);
+          Ai_row_index[part[i]].push_back(globalTolocal[i]);
+          Ai_col_index[part[i]].push_back(globalTolocal[i]);
           Ai_values[part[i]].push_back(val[j]);
-          Ai_row_index[part[i]].push_back(i);
-          Ai_col_index[part[i]].push_back(col_index[j]);
+          Ai_row_index[part[i]].push_back(globalTolocal[i]);
+          Ai_col_index[part[i]].push_back(globalTolocal[col_index[j]]);
           Ai_values[part[i]].push_back(-val[j]);
 
-          Si_col_index[part[i]].push_back(i);
-          Si_row_index[part[i]].push_back(i);
+          Si_col_index[part[i]].push_back(globalTolocal[i]);
+          Si_row_index[part[i]].push_back(globalTolocal[i]);
           Si_values[part[i]].push_back(val[j] / cStar / cStar / 2);
         } else {
-          Ai_row_index[part[i]].push_back(i);
-          Ai_col_index[part[i]].push_back(i);
+          Ai_row_index[part[i]].push_back(globalTolocal[i]);
+          Ai_col_index[part[i]].push_back(globalTolocal[i]);
           Ai_values[part[i]].push_back(val[j]);
 
-          Si_col_index[part[i]].push_back(i);
-          Si_row_index[part[i]].push_back(i);
+          Si_col_index[part[i]].push_back(globalTolocal[i]);
+          Si_row_index[part[i]].push_back(globalTolocal[i]);
           Si_values[part[i]].push_back(val[j] / cStar / cStar);
         }
       }
     }
   }
 
-  sparse_matrix_t Ai[nparts];
-  sparse_matrix_t Si[nparts];
+  std::vector<sparse_matrix_t> AiCOO;
+  std::vector<sparse_matrix_t> SiCOO;
+  std::vector<sparse_matrix_t> Ai;
+  std::vector<sparse_matrix_t> Si;
+
+  AiCOO.resize(nparts);
+  SiCOO.resize(nparts);
+  Ai.resize(nparts);
+  Si.resize(nparts);
 
   int k0 = 4;
-  int k[nparts];
-  double E[nparts][k0];
-  double X[nparts][nvtxs];
+  std::vector<MKL_INT> k;
+  k.resize(nparts);
+  std::vector<double> eigenvalue[nparts];
+  for(i = 0; i < nparts; ++i) {
+    eigenvalue[i].resize(k0);
+  }
+  std::vector<double> eigenvector[nparts];
+  for(i = 0; i < nparts; ++i) {
+    eigenvector[i].resize(count[i]);
+  }
   double res[nparts];
 
   matrix_descr descrA;
   matrix_descr descrS;
 
-  descrA.type = SPARSE_MATRIX_TYPE_SYMMETRIC;
-  descrS.type = SPARSE_MATRIX_TYPE_SYMMETRIC;
-  descrA.mode = SPARSE_FILL_MODE_UPPER;
-  descrS.mode = SPARSE_FILL_MODE_UPPER;
+  descrA.type = SPARSE_MATRIX_TYPE_GENERAL;
+  descrS.type = SPARSE_MATRIX_TYPE_GENERAL;
   descrA.diag = SPARSE_DIAG_NON_UNIT;
   descrS.diag = SPARSE_DIAG_NON_UNIT;
 
-  for (i = 0; i < nparts; ++i) {
-    mkl_sparse_d_create_coo(&Ai[i], indexing, nvtxs, nvtxs, Ai_values[i].size(),
-                            Ai_row_index[i].data(), Ai_col_index[i].data(),
-                            Ai_values[i].data());
-    mkl_sparse_d_create_coo(&Si[i], indexing, nvtxs, nvtxs, Si_values[i].size(),
-                            Si_row_index[i].data(), Si_col_index[i].data(),
-                            Si_values[i].data());
-    mkl_sparse_d_gv(&which, pm, Ai[i], descrA, Si[i], descrS, k0, &k[i], E[i],
-                    X[i], &res[i]);
+  for (i = 0; i < 1; ++i) {
+    for(j = 0; j < Ai_values[i].size(); ++j) {
+      std::cout << Ai_row_index[i][j] << " " << Ai_col_index[i][j] << " " << Ai_values[i][j] << std::endl;
+    }
+    std::cout << std::endl;
+    for(j = 0; j < Si_values[i].size(); ++j) {
+      std::cout << Si_row_index[i][j] << " " << Si_col_index[i][j] << " " << Si_values[i][j] << std::endl;
+    }
+    mkl_sparse_d_create_coo(&AiCOO[i], indexing, count[i], count[i],
+                            Ai_values[i].size(), Ai_row_index[i].data(),
+                            Ai_col_index[i].data(), Ai_values[i].data());
+    mkl_sparse_d_create_coo(&SiCOO[i], indexing, count[i], count[i],
+                            Si_values[i].size(), Si_row_index[i].data(),
+                            Si_col_index[i].data(), Si_values[i].data());
+
+    mkl_sparse_convert_csr(AiCOO[i], SPARSE_OPERATION_NON_TRANSPOSE, &Ai[i]);
+    mkl_sparse_convert_csr(SiCOO[i], SPARSE_OPERATION_NON_TRANSPOSE, &Si[i]);
+
+    // mkl_sparse_destroy(AiCOO[i]);
+    // mkl_sparse_destroy(SiCOO[i]);
+    
+    sparse_status_t error = mkl_sparse_d_gv(&which, pm, Ai[i], descrA, Si[i], descrS, k0,
+                                   k.data(), eigenvalue[i].data(),
+                                   eigenvector[i].data(), &res[i]);
+    std::cout << "number of found eigenvalues: " << k[i] << std::endl;
+    std::cout << "smallest eigenvalue: " << eigenvalue[i][1] << std::endl;
+    std::cout << "error: " << error << std::endl;
   }
 }
 

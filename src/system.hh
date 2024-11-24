@@ -26,7 +26,9 @@ class System {
   idx_t nparts;
   idx_t *part;
 
+  std::vector<int> count;
   std::vector<std::set<idx_t>> vertices;
+  std::vector<MKL_INT> globalTolocal;
   std::vector<std::unordered_set<idx_t>> neighbours;
   std::vector<std::unordered_set<idx_t>> overlapping;
 
