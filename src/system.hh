@@ -32,6 +32,10 @@ class System {
   std::vector<std::unordered_set<idx_t>> neighbours;
   std::vector<std::unordered_set<idx_t>> overlapping;
 
+  std::vector<std::vector<double>> eigenvector;
+  std::vector<std::vector<double>> eigenvalue;
+  
+
   int overlap;
   double cStar;
 

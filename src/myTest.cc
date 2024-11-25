@@ -20,16 +20,16 @@ int main() {
   std::vector<MKL_INT> A2_col_index = {0, 1, 0, 1, 2, 1, 2};
   std::vector<double> A2_values = {3, -1, -1, 2, -1, -1, 2};
 
-  std::vector<MKL_INT> S_row_index = {0, 1, 2};
-  std::vector<MKL_INT> S_col_index = {0, 1, 2};
-  std::vector<double> S_values = {2.5, 1, 1.5};
+  std::vector<MKL_INT> S_row_index = {0, 0, 1, 1, 1, 2, 2};
+  std::vector<MKL_INT> S_col_index = {0, 0, 1, 1, 1, 2, 2};
+  std::vector<double> S_values = {2, 0.5, 0.5, 0, 0.5, 0.5, 1};
 
   sparse_index_base_t indexing = SPARSE_INDEX_BASE_ZERO;
   sparse_matrix_t Ai, Si;
   sparse_matrix_t AiCOO = NULL, SiCOO = NULL;
   mkl_sparse_d_create_coo(&AiCOO, indexing, 3, 3, 11, A_row_index.data(),
                           A_col_index.data(), A_values.data());
-  mkl_sparse_d_create_coo(&SiCOO, indexing, 3, 3, 3, S_row_index.data(),
+  mkl_sparse_d_create_coo(&SiCOO, indexing, 3, 3, 7, S_row_index.data(),
                           S_col_index.data(), S_values.data());
 
   mkl_sparse_convert_csr(AiCOO, SPARSE_OPERATION_NON_TRANSPOSE, &Ai);
@@ -66,8 +66,8 @@ int main() {
   // pm[6] = 1;
   // pm[8] = 1;
   matrix_descr descr;
-  descr.type = SPARSE_MATRIX_TYPE_GENERAL;
-  descr.mode = SPARSE_FILL_MODE_FULL;
+  descr.type = SPARSE_MATRIX_TYPE_SYMMETRIC;
+  descr.mode = SPARSE_FILL_MODE_UPPER;
   descr.diag = SPARSE_DIAG_NON_UNIT;
   int k0 = 3;
   int k;

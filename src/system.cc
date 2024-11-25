@@ -211,23 +211,21 @@ void System::formAUX() {
   char which = 'S';
   MKL_INT pm[128];
 
-  for (i = 0; i < 128; ++i) {
-    pm[i] = 0;
-  }
-  pm[1] = 6;
-  pm[2] = 1;
-  pm[3] = 10;
-  pm[4] = 10000;
-  pm[6] = 1;
-  // mkl_sparse_ee_init(pm);
+  mkl_sparse_ee_init(pm);
   std::cout << "nparts: " << nparts << std::endl;
 
-  std::vector<MKL_INT> Ai_col_index[nparts];
-  std::vector<MKL_INT> Ai_row_index[nparts];
-  std::vector<double> Ai_values[nparts];
-  std::vector<MKL_INT> Si_col_index[nparts];
-  std::vector<MKL_INT> Si_row_index[nparts];
-  std::vector<double> Si_values[nparts];
+  std::vector<std::vector<MKL_INT>> Ai_col_index;
+  std::vector<std::vector<MKL_INT>> Ai_row_index;
+  std::vector<std::vector<double>> Ai_values;
+  std::vector<std::vector<MKL_INT>> Si_col_index;
+  std::vector<std::vector<MKL_INT>> Si_row_index;
+  std::vector<std::vector<double>> Si_values;
+  Ai_col_index.resize(nparts);
+  Ai_row_index.resize(nparts);
+  Ai_values.resize(nparts);
+  Si_col_index.resize(nparts);
+  Si_row_index.resize(nparts);
+  Si_values.resize(nparts);
   for (i = 0; i < nparts; ++i) {
     Ai_col_index[i].reserve(nvtxs);
     Ai_row_index[i].reserve(nvtxs);
@@ -274,35 +272,32 @@ void System::formAUX() {
   Ai.resize(nparts);
   Si.resize(nparts);
 
-  int k0 = 4;
-  std::vector<MKL_INT> k;
-  k.resize(nparts);
-  std::vector<double> eigenvalue[nparts];
-  for(i = 0; i < nparts; ++i) {
+  int k0 = 3;
+  int k;
+
+  eigenvalue.resize(nparts);
+  for (i = 0; i < nparts; ++i) {
     eigenvalue[i].resize(k0);
   }
-  std::vector<double> eigenvector[nparts];
-  for(i = 0; i < nparts; ++i) {
-    eigenvector[i].resize(count[i]);
+
+  eigenvector.resize(nparts);
+  for (i = 0; i < nparts; ++i) {
+    eigenvector[i].resize(k0 * count[i]);
   }
+
+  double E[3][4];
+  double X[3][12];
+
   double res[nparts];
 
-  matrix_descr descrA;
-  matrix_descr descrS;
+  matrix_descr descr;
 
-  descrA.type = SPARSE_MATRIX_TYPE_GENERAL;
-  descrS.type = SPARSE_MATRIX_TYPE_GENERAL;
-  descrA.diag = SPARSE_DIAG_NON_UNIT;
-  descrS.diag = SPARSE_DIAG_NON_UNIT;
+  descr.type = SPARSE_MATRIX_TYPE_SYMMETRIC;
+  descr.diag = SPARSE_DIAG_NON_UNIT;
+  descr.mode = SPARSE_FILL_MODE_UPPER;
 
-  for (i = 0; i < 1; ++i) {
-    for(j = 0; j < Ai_values[i].size(); ++j) {
-      std::cout << Ai_row_index[i][j] << " " << Ai_col_index[i][j] << " " << Ai_values[i][j] << std::endl;
-    }
-    std::cout << std::endl;
-    for(j = 0; j < Si_values[i].size(); ++j) {
-      std::cout << Si_row_index[i][j] << " " << Si_col_index[i][j] << " " << Si_values[i][j] << std::endl;
-    }
+  // #pragma omp parallel for
+  for (i = 0; i < nparts; ++i) {
     mkl_sparse_d_create_coo(&AiCOO[i], indexing, count[i], count[i],
                             Ai_values[i].size(), Ai_row_index[i].data(),
                             Ai_col_index[i].data(), Ai_values[i].data());
@@ -313,15 +308,23 @@ void System::formAUX() {
     mkl_sparse_convert_csr(AiCOO[i], SPARSE_OPERATION_NON_TRANSPOSE, &Ai[i]);
     mkl_sparse_convert_csr(SiCOO[i], SPARSE_OPERATION_NON_TRANSPOSE, &Si[i]);
 
-    // mkl_sparse_destroy(AiCOO[i]);
-    // mkl_sparse_destroy(SiCOO[i]);
-    
-    sparse_status_t error = mkl_sparse_d_gv(&which, pm, Ai[i], descrA, Si[i], descrS, k0,
-                                   k.data(), eigenvalue[i].data(),
-                                   eigenvector[i].data(), &res[i]);
-    std::cout << "number of found eigenvalues: " << k[i] << std::endl;
-    std::cout << "smallest eigenvalue: " << eigenvalue[i][1] << std::endl;
-    std::cout << "error: " << error << std::endl;
+    mkl_sparse_destroy(AiCOO[i]);
+    mkl_sparse_destroy(SiCOO[i]);
+
+    sparse_status_t error =
+        mkl_sparse_d_gv(&which, pm, Ai[i], descr, Si[i], descr, k0, &k,
+                        eigenvalue[i].data(), eigenvector[i].data(), &res[i]);
+    if (error != 0) {
+      std::cout << "===========error in solving eigenvalue problem==========="
+                << error << "===============" << std::endl;
+    }
+    if (k < k0) {
+      std::cout << "===========Not find enough eigenvalues==========="
+                << std::endl;
+    }
+
+    mkl_sparse_destroy(Ai[i]);
+    mkl_sparse_destroy(Si[i]);
   }
 }
 
