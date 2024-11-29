@@ -34,6 +34,7 @@ class System {
 
   std::vector<std::vector<double>> eigenvector;
   std::vector<std::vector<double>> eigenvalue;
+  std::vector<std::vector<double>> cemBasis;
   
 
   int overlap;
@@ -47,6 +48,7 @@ public:
   void graphPartition();
   void findNeighbours();
   void formAUX();
+  void formCEM();
   System();
   System(MKL_INT size);
   System(MKL_INT size, idx_t nparts);

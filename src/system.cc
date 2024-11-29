@@ -212,6 +212,8 @@ void System::formAUX() {
   MKL_INT pm[128];
 
   mkl_sparse_ee_init(pm);
+  pm[7] = 1;
+  pm[8] = 1;
   std::cout << "nparts: " << nparts << std::endl;
 
   std::vector<std::vector<MKL_INT>> Ai_col_index;
@@ -226,14 +228,15 @@ void System::formAUX() {
   Si_col_index.resize(nparts);
   Si_row_index.resize(nparts);
   Si_values.resize(nparts);
-  for (i = 0; i < nparts; ++i) {
-    Ai_col_index[i].reserve(nvtxs);
-    Ai_row_index[i].reserve(nvtxs);
-    Ai_values[i].reserve(nvtxs);
-    Si_col_index[i].reserve(nvtxs);
-    Si_row_index[i].reserve(nvtxs);
-    Si_values[i].reserve(nvtxs);
-  }
+
+  // for (i = 0; i < nparts; ++i) {
+  //   Ai_col_index[i].reserve(nvtxs);
+  //   Ai_row_index[i].reserve(nvtxs);
+  //   Ai_values[i].reserve(nvtxs);
+  //   Si_col_index[i].reserve(nvtxs);
+  //   Si_row_index[i].reserve(nvtxs);
+  //   Si_values[i].reserve(nvtxs);
+  // }
 
   for (i = 0; i < nvtxs; ++i) {
     for (j = rows_start[i]; j < rows_end[i]; ++j) {
@@ -285,9 +288,6 @@ void System::formAUX() {
     eigenvector[i].resize(k0 * count[i]);
   }
 
-  double E[3][4];
-  double X[3][12];
-
   double res[nparts];
 
   matrix_descr descr;
@@ -296,7 +296,128 @@ void System::formAUX() {
   descr.diag = SPARSE_DIAG_NON_UNIT;
   descr.mode = SPARSE_FILL_MODE_UPPER;
 
-  // #pragma omp parallel for
+#pragma omp parallel for
+  for (i = 0; i < nparts; ++i) {
+    //   for (j = 0; j < Ai_values[i].size(); ++j) {
+    //     std::cout<< Ai_col_index[i][j] << "  ";
+    //   }
+    //   std::cout << std::endl;
+    //   for(j = 0; j < 11; ++j) {
+    //     std::cout << Ai_row_index[i][j] << "  ";
+    //   }
+    //   std::cout << std::endl;
+    //   for(j = 0; j < 11; ++j) {
+    //     std::cout << Ai_values[i][j] << "  ";
+    //   }
+    //   std::cout << std::endl;
+
+    //   for (j = 0; j < Si_values[i].size(); ++j) {
+    //     std::cout<< Si_col_index[i][j] << "  ";
+    //   }
+    //   std::cout << std::endl;
+    //   for (j = 0; j < Si_values[i].size(); ++j) {
+    //     std::cout << Si_row_index[i][j] << "  ";
+    //   }
+    //   std::cout << std::endl;
+    //   for (j = 0; j < Si_values[i].size(); ++j) {
+    //     std::cout << Si_values[i][j] << "  ";
+    //   }
+    //   std::cout << std::endl;
+
+    mkl_sparse_d_create_coo(&AiCOO[i], indexing, count[i], count[i],
+                            Ai_values[i].size(), Ai_row_index[i].data(),
+                            Ai_col_index[i].data(), Ai_values[i].data());
+    mkl_sparse_d_create_coo(&SiCOO[i], indexing, count[i], count[i],
+                            Si_values[i].size(), Si_row_index[i].data(),
+                            Si_col_index[i].data(), Si_values[i].data());
+
+
+    mkl_sparse_convert_csr(AiCOO[i], SPARSE_OPERATION_NON_TRANSPOSE, &Ai[i]);
+    mkl_sparse_convert_csr(SiCOO[i], SPARSE_OPERATION_NON_TRANSPOSE, &Si[i]);
+
+    mkl_sparse_destroy(AiCOO[i]);
+    mkl_sparse_destroy(SiCOO[i]);
+
+    sparse_status_t error =
+        mkl_sparse_d_gv(&which, pm, Ai[i], descr, Si[i], descr, k0, &k,
+                        eigenvalue[i].data(), eigenvector[i].data(), &res[i]);
+    // if (error != 0) {
+    //   std::cout << "===========error in solving eigenvalue
+    //   problem==========="
+    //             << error << "===============" << std::endl;
+    // }
+    // if (k < k0) {
+    //   std::cout << "===========Not find enough eigenvalues==========="
+    //             << std::endl;
+    // }
+    std::cout << "part: " << i << " residual: " << res[i]
+              << " Smallest eigenvalue: " << eigenvalue[i][0] << std::endl;
+
+    mkl_sparse_destroy(Ai[i]);
+    mkl_sparse_destroy(Si[i]);
+  }
+}
+
+void System::formCEM() {
+  MKL_INT *rows_start, *rows_end, *col_index;
+  MKL_INT rows, cols;
+  sparse_index_base_t indexing;
+  mkl_sparse_d_export_csr(matL, &indexing, &rows, &cols, &rows_start, &rows_end,
+                          &col_index, &val);
+  int i = 0, j = 0;
+
+  std::vector<std::vector<MKL_INT>> Ai_col_index;
+  std::vector<std::vector<MKL_INT>> Ai_row_index;
+  std::vector<std::vector<double>> Ai_values;
+  std::vector<std::vector<MKL_INT>> Si_col_index;
+  std::vector<std::vector<MKL_INT>> Si_row_index;
+  std::vector<std::vector<double>> Si_values;
+  Ai_col_index.resize(nparts);
+  Ai_row_index.resize(nparts);
+  Ai_values.resize(nparts);
+  Si_col_index.resize(nparts);
+  Si_row_index.resize(nparts);
+  Si_values.resize(nparts);
+
+  for (i = 0; i < nvtxs; ++i) {
+    for (j = rows_start[i]; j < rows_end[i]; ++j) {
+      if (part[i] == part[col_index[j]]) {
+        if (col_index[j] != i) {
+          Ai_row_index[part[i]].push_back(globalTolocal[i]);
+          Ai_col_index[part[i]].push_back(globalTolocal[i]);
+          Ai_values[part[i]].push_back(val[j]);
+          Ai_row_index[part[i]].push_back(globalTolocal[i]);
+          Ai_col_index[part[i]].push_back(globalTolocal[col_index[j]]);
+          Ai_values[part[i]].push_back(-val[j]);
+
+          Si_col_index[part[i]].push_back(globalTolocal[i]);
+          Si_row_index[part[i]].push_back(globalTolocal[i]);
+          Si_values[part[i]].push_back(val[j] / cStar / cStar / 2);
+        } else {
+          Ai_row_index[part[i]].push_back(globalTolocal[i]);
+          Ai_col_index[part[i]].push_back(globalTolocal[i]);
+          Ai_values[part[i]].push_back(val[j]);
+
+          Si_col_index[part[i]].push_back(globalTolocal[i]);
+          Si_row_index[part[i]].push_back(globalTolocal[i]);
+          Si_values[part[i]].push_back(val[j] / cStar / cStar);
+        }
+      }
+    }
+  }
+
+  std::vector<sparse_matrix_t> AiCOO;
+  std::vector<sparse_matrix_t> SiCOO;
+  std::vector<sparse_matrix_t> Ai;
+  std::vector<sparse_matrix_t> Si;
+
+  AiCOO.resize(nparts);
+  SiCOO.resize(nparts);
+  Ai.resize(nparts);
+  Si.resize(nparts);
+
+
+#pragma omp parallel for
   for (i = 0; i < nparts; ++i) {
     mkl_sparse_d_create_coo(&AiCOO[i], indexing, count[i], count[i],
                             Ai_values[i].size(), Ai_row_index[i].data(),
@@ -308,20 +429,12 @@ void System::formAUX() {
     mkl_sparse_convert_csr(AiCOO[i], SPARSE_OPERATION_NON_TRANSPOSE, &Ai[i]);
     mkl_sparse_convert_csr(SiCOO[i], SPARSE_OPERATION_NON_TRANSPOSE, &Si[i]);
 
+
+
+
     mkl_sparse_destroy(AiCOO[i]);
     mkl_sparse_destroy(SiCOO[i]);
 
-    sparse_status_t error =
-        mkl_sparse_d_gv(&which, pm, Ai[i], descr, Si[i], descr, k0, &k,
-                        eigenvalue[i].data(), eigenvector[i].data(), &res[i]);
-    if (error != 0) {
-      std::cout << "===========error in solving eigenvalue problem==========="
-                << error << "===============" << std::endl;
-    }
-    if (k < k0) {
-      std::cout << "===========Not find enough eigenvalues==========="
-                << std::endl;
-    }
 
     mkl_sparse_destroy(Ai[i]);
     mkl_sparse_destroy(Si[i]);

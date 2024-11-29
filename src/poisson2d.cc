@@ -10,7 +10,7 @@
 int main() {
   auto start = std::chrono::high_resolution_clock::now();
 
-  System sys(3, 3, 2);
+  System sys(256, 50, 2);
   sys.getData();
   sys.graphPartition();
   sys.formRHS();
