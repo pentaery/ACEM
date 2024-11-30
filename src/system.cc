@@ -170,15 +170,31 @@ void System::findNeighbours() {
       }
     }
   }
-  for (i = 0; i < overlap; ++i) {
+
+  for (j = 0; j < nparts; ++j) {
+    overlapping[j].insert(neighbours[j].begin(), neighbours[j].end());
+  }
+
+  for (i = 1; i < overlap; ++i) {
     for (j = 0; j < nparts; ++j) {
-      if (i == 0) {
-        overlapping[j].insert(neighbours[j].begin(), neighbours[j].end());
-      } else {
-        for (const auto &element : overlapping[j]) {
-          overlapping[j].insert(neighbours[element].begin(),
-                                neighbours[element].end());
-        }
+      std::set<MKL_INT> tempset;
+      for (const auto &element : overlapping[j]) {
+        tempset.insert(neighbours[element].begin(), neighbours[element].end());
+      }
+      overlapping[j].insert(tempset.begin(), tempset.end());
+    }
+  }
+  // for (const auto &element : overlapping[17]) {
+  //   std::cout << element << " ";
+  // }
+  // std::cout << std::endl;
+
+  for (i = 0; i < nparts; ++i) {
+    j = 0;
+    for (const auto &element : overlapping[i]) {
+      for (const auto &element2 : vertices[element]) {
+        globaltoLocalCEM[i].insert({element2, j});
+        j++;
       }
     }
   }
@@ -331,7 +347,6 @@ void System::formAUX() {
                             Si_values[i].size(), Si_row_index[i].data(),
                             Si_col_index[i].data(), Si_values[i].data());
 
-
     mkl_sparse_convert_csr(AiCOO[i], SPARSE_OPERATION_NON_TRANSPOSE, &Ai[i]);
     mkl_sparse_convert_csr(SiCOO[i], SPARSE_OPERATION_NON_TRANSPOSE, &Si[i]);
 
@@ -369,15 +384,9 @@ void System::formCEM() {
   std::vector<std::vector<MKL_INT>> Ai_col_index;
   std::vector<std::vector<MKL_INT>> Ai_row_index;
   std::vector<std::vector<double>> Ai_values;
-  std::vector<std::vector<MKL_INT>> Si_col_index;
-  std::vector<std::vector<MKL_INT>> Si_row_index;
-  std::vector<std::vector<double>> Si_values;
   Ai_col_index.resize(nparts);
   Ai_row_index.resize(nparts);
   Ai_values.resize(nparts);
-  Si_col_index.resize(nparts);
-  Si_row_index.resize(nparts);
-  Si_values.resize(nparts);
 
   for (i = 0; i < nvtxs; ++i) {
     for (j = rows_start[i]; j < rows_end[i]; ++j) {
@@ -389,55 +398,32 @@ void System::formCEM() {
           Ai_row_index[part[i]].push_back(globalTolocal[i]);
           Ai_col_index[part[i]].push_back(globalTolocal[col_index[j]]);
           Ai_values[part[i]].push_back(-val[j]);
-
-          Si_col_index[part[i]].push_back(globalTolocal[i]);
-          Si_row_index[part[i]].push_back(globalTolocal[i]);
-          Si_values[part[i]].push_back(val[j] / cStar / cStar / 2);
         } else {
           Ai_row_index[part[i]].push_back(globalTolocal[i]);
           Ai_col_index[part[i]].push_back(globalTolocal[i]);
           Ai_values[part[i]].push_back(val[j]);
-
-          Si_col_index[part[i]].push_back(globalTolocal[i]);
-          Si_row_index[part[i]].push_back(globalTolocal[i]);
-          Si_values[part[i]].push_back(val[j] / cStar / cStar);
         }
       }
     }
   }
 
   std::vector<sparse_matrix_t> AiCOO;
-  std::vector<sparse_matrix_t> SiCOO;
   std::vector<sparse_matrix_t> Ai;
-  std::vector<sparse_matrix_t> Si;
 
   AiCOO.resize(nparts);
-  SiCOO.resize(nparts);
   Ai.resize(nparts);
-  Si.resize(nparts);
-
 
 #pragma omp parallel for
   for (i = 0; i < nparts; ++i) {
     mkl_sparse_d_create_coo(&AiCOO[i], indexing, count[i], count[i],
                             Ai_values[i].size(), Ai_row_index[i].data(),
                             Ai_col_index[i].data(), Ai_values[i].data());
-    mkl_sparse_d_create_coo(&SiCOO[i], indexing, count[i], count[i],
-                            Si_values[i].size(), Si_row_index[i].data(),
-                            Si_col_index[i].data(), Si_values[i].data());
 
     mkl_sparse_convert_csr(AiCOO[i], SPARSE_OPERATION_NON_TRANSPOSE, &Ai[i]);
-    mkl_sparse_convert_csr(SiCOO[i], SPARSE_OPERATION_NON_TRANSPOSE, &Si[i]);
-
-
-
 
     mkl_sparse_destroy(AiCOO[i]);
-    mkl_sparse_destroy(SiCOO[i]);
-
 
     mkl_sparse_destroy(Ai[i]);
-    mkl_sparse_destroy(Si[i]);
   }
 }
 

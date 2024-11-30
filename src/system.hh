@@ -2,9 +2,11 @@
 #include "mkl_spblas.h"
 #include "mkl_types.h"
 #include <cmath>
+#include <map>
 #include <metis.h>
 #include <set>
 #include <unordered_set>
+#include <unordered_map>
 #include <vector>
 
 class System {
@@ -28,14 +30,14 @@ class System {
 
   std::vector<int> count;
   std::vector<std::set<idx_t>> vertices;
-  std::vector<MKL_INT> globalTolocal;
-  std::vector<std::unordered_set<idx_t>> neighbours;
-  std::vector<std::unordered_set<idx_t>> overlapping;
+  std::vector<idx_t> globalTolocal;
+  std::vector<std::unordered_map<idx_t, idx_t>> globaltoLocalCEM;
+  std::vector<std::set<idx_t>> neighbours;
+  std::vector<std::set<idx_t>> overlapping;
 
   std::vector<std::vector<double>> eigenvector;
   std::vector<std::vector<double>> eigenvalue;
   std::vector<std::vector<double>> cemBasis;
-  
 
   int overlap;
   double cStar;
