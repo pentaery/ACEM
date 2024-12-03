@@ -160,6 +160,7 @@ void System::findNeighbours() {
   for (i = 0; i < nvtxs; ++i) {
     vertices[part[i]].insert(i);
   }
+
   MKL_INT *rows_start, *rows_end, *col_index;
   mkl_sparse_d_export_csr(matL, &indexing, &rows, &cols, &rows_start, &rows_end,
                           &col_index, &val);
@@ -171,8 +172,11 @@ void System::findNeighbours() {
     }
   }
 
-  for (j = 0; j < nparts; ++j) {
-    overlapping[j].insert(neighbours[j].begin(), neighbours[j].end());
+  if (overlap > 0) {
+    for (j = 0; j < nparts; ++j) {
+      overlapping[j].insert(neighbours[j].begin(), neighbours[j].end());
+      overlapping[j].insert(j);
+    }
   }
 
   for (i = 1; i < overlap; ++i) {
@@ -184,23 +188,8 @@ void System::findNeighbours() {
       overlapping[j].insert(tempset.begin(), tempset.end());
     }
   }
-  // for (const auto &element : overlapping[17]) {
-  //   std::cout << element << " ";
-  // }
-  // std::cout << std::endl;
-
-  for (i = 0; i < nparts; ++i) {
-    j = 0;
-    for (const auto &element : overlapping[i]) {
-      for (const auto &element2 : vertices[element]) {
-        globaltoLocalCEM[i].insert({element2, j});
-        j++;
-      }
-    }
-  }
 
   globalTolocal.resize(nvtxs);
-
   count.resize(nparts);
   for (i = 0; i < nparts; ++i) {
     count[i] = 0;
@@ -210,10 +199,17 @@ void System::findNeighbours() {
     count[part[i]]++;
   }
 
-  // for (const auto &element : overlapping[0]) {
-  //   std::cout << element << " ";
-  // }
-  // std::cout << std::endl;
+  verticesCEM.resize(nparts);
+  globalTolocalCEM.resize(nparts);
+  for (i = 0; i < nparts; ++i) {
+    j = 0;
+    for (const auto &element : overlapping[i]) {
+      verticesCEM[i].insert(vertices[element].begin(), vertices[element].end());
+      for (const auto &element2 : vertices[element]) {
+        globalTolocalCEM[i].insert({element2, j++});
+      }
+    }
+  }
 }
 
 void System::formAUX() {
@@ -291,7 +287,6 @@ void System::formAUX() {
   Ai.resize(nparts);
   Si.resize(nparts);
 
-  int k0 = 3;
   int k;
 
   eigenvalue.resize(nparts);
@@ -379,7 +374,8 @@ void System::formCEM() {
   sparse_index_base_t indexing;
   mkl_sparse_d_export_csr(matL, &indexing, &rows, &cols, &rows_start, &rows_end,
                           &col_index, &val);
-  int i = 0, j = 0;
+  int i = 0, j = 0, k = 0;
+  std::vector<double> sData(nvtxs, 0.0);
 
   std::vector<std::vector<MKL_INT>> Ai_col_index;
   std::vector<std::vector<MKL_INT>> Ai_row_index;
@@ -390,41 +386,104 @@ void System::formCEM() {
 
   for (i = 0; i < nvtxs; ++i) {
     for (j = rows_start[i]; j < rows_end[i]; ++j) {
-      if (part[i] == part[col_index[j]]) {
-        if (col_index[j] != i) {
-          Ai_row_index[part[i]].push_back(globalTolocal[i]);
-          Ai_col_index[part[i]].push_back(globalTolocal[i]);
-          Ai_values[part[i]].push_back(val[j]);
-          Ai_row_index[part[i]].push_back(globalTolocal[i]);
-          Ai_col_index[part[i]].push_back(globalTolocal[col_index[j]]);
-          Ai_values[part[i]].push_back(-val[j]);
-        } else {
-          Ai_row_index[part[i]].push_back(globalTolocal[i]);
-          Ai_col_index[part[i]].push_back(globalTolocal[i]);
-          Ai_values[part[i]].push_back(val[j]);
+      if (col_index[j] == i) {
+        sData[i] += val[j] / cStar / cStar;
+      } else {
+        sData[i] += val[j] / cStar / cStar / 2;
+      }
+      for (k = 0; k < nparts; ++k) {
+        if (verticesCEM[k].count(i) == 1 &&
+            verticesCEM[k].count(col_index[j]) == 1) {
+          if (col_index[j] < i) {
+            Ai_row_index[k].push_back(globalTolocalCEM[k][i]);
+            Ai_col_index[k].push_back(globalTolocalCEM[k][i]);
+            Ai_values[k].push_back(val[j]);
+          } else if (col_index[j] > i) {
+            Ai_row_index[k].push_back(globalTolocalCEM[k][i]);
+            Ai_col_index[k].push_back(globalTolocalCEM[k][i]);
+            Ai_values[k].push_back(val[j]);
+            Ai_row_index[k].push_back(globalTolocalCEM[k][i]);
+            Ai_col_index[k].push_back(globalTolocalCEM[k][col_index[j]]);
+            Ai_values[k].push_back(-val[j]);
+          } else {
+            Ai_row_index[k].push_back(globalTolocalCEM[k][i]);
+            Ai_col_index[k].push_back(globalTolocalCEM[k][i]);
+            Ai_values[k].push_back(val[j]);
+          }
         }
       }
     }
   }
 
+  for (i = 0; i < nparts; ++i) {
+    for (const auto &element : overlapping[i]) {
+      for (const auto &element1 : vertices[element]) {
+        for (const auto &element2 : vertices[element]) {
+          if (globalTolocalCEM[i][element1] <= globalTolocalCEM[i][element2]) {
+            for (j = 0; j < k0; ++j) {
+              Ai_row_index[i].push_back(globalTolocalCEM[i][element1]);
+              Ai_col_index[i].push_back(globalTolocalCEM[i][element2]);
+              Ai_values[i].push_back(
+                  sData[globalTolocalCEM[i][element1]] *
+                  sData[globalTolocalCEM[i][element2]] *
+                  eigenvector[element][j * vertices[element].size() +
+                                       globalTolocalCEM[i][element1]] *
+                  eigenvector[element][j * vertices[element].size() +
+                                       globalTolocalCEM[i][element2]]);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  std::vector<std::vector<std::vector<double>>> rhs;
+  rhs.resize(nparts);
+  for (i = 0; i < nparts; ++i) {
+    rhs[i].resize(k0);
+  }
+  for (i = 0; i < k0; ++i) {
+    for (j = 0; j < nparts; ++j) {
+      rhs[j][i].resize(vertices[j].size());
+    }
+  }
+  for (i = 0; i < nparts; ++i) {
+    for (j = 0; j < k0; ++j) {
+      std::fill(rhs[i][j].begin(), rhs[i][j].end(), 0);
+    }
+  }
+
+  for (i = 0; i < nparts; ++i) {
+    for (j = 0; j < k0; ++j) {
+      for (const auto &element : vertices[i]) {
+        rhs[i][j][globalTolocalCEM[i][element]] =
+            sData[globalTolocalCEM[i][element]] *
+            eigenvector[i]
+                       [j * vertices[i].size() + globalTolocal[element]];
+      }
+    }
+  }
+
+  std::cout << "Ai_values[0].size(): " << Ai_values[2].size() << std::endl;
   std::vector<sparse_matrix_t> AiCOO;
   std::vector<sparse_matrix_t> Ai;
 
   AiCOO.resize(nparts);
   Ai.resize(nparts);
 
-#pragma omp parallel for
-  for (i = 0; i < nparts; ++i) {
-    mkl_sparse_d_create_coo(&AiCOO[i], indexing, count[i], count[i],
-                            Ai_values[i].size(), Ai_row_index[i].data(),
-                            Ai_col_index[i].data(), Ai_values[i].data());
+  // #pragma omp parallel for
+  //   for (i = 0; i < nparts; ++i) {
+  //     mkl_sparse_d_create_coo(&AiCOO[i], indexing, count[i], count[i],
+  //                             Ai_values[i].size(), Ai_row_index[i].data(),
+  //                             Ai_col_index[i].data(), Ai_values[i].data());
 
-    mkl_sparse_convert_csr(AiCOO[i], SPARSE_OPERATION_NON_TRANSPOSE, &Ai[i]);
+  //     mkl_sparse_convert_csr(AiCOO[i], SPARSE_OPERATION_NON_TRANSPOSE,
+  //     &Ai[i]);
 
-    mkl_sparse_destroy(AiCOO[i]);
+  //     mkl_sparse_destroy(AiCOO[i]);
 
-    mkl_sparse_destroy(Ai[i]);
-  }
+  //     mkl_sparse_destroy(Ai[i]);
+  //   }
 }
 
 System::System() {
@@ -450,6 +509,7 @@ System::System() {
   overlapping.resize(nparts);
   overlap = 2;
   cStar = 1.0;
+  k0 = 3;
 }
 
 System::System(MKL_INT size) {
@@ -475,6 +535,7 @@ System::System(MKL_INT size) {
   overlapping.resize(nparts);
   overlap = 2;
   cStar = 1.0;
+  k0 = 3;
 }
 
 System::System(MKL_INT size, idx_t nparts) {
@@ -500,6 +561,7 @@ System::System(MKL_INT size, idx_t nparts) {
   overlapping.resize(nparts);
   overlap = 2;
   cStar = 1.0;
+  k0 = 3;
 }
 
 System::System(MKL_INT size, idx_t nparts, int overlap) {
@@ -525,6 +587,7 @@ System::System(MKL_INT size, idx_t nparts, int overlap) {
   neighbours.resize(nparts);
   overlapping.resize(nparts);
   cStar = 1.0;
+  k0 = 3;
 }
 //     fprintf(fp, "%d ", part[i]);
 //   }
