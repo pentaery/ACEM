@@ -376,15 +376,15 @@ void System::formCEM() {
   mkl_sparse_d_export_csr(matL, &indexing, &rows, &cols, &rows_start, &rows_end,
                           &col_index, &val);
   int i = 0, j = 0, k = 0;
-  std::vector<double> sData(nvtxs, 0.0);
 
   std::vector<std::vector<MKL_INT>> Ai_col_index;
   std::vector<std::vector<MKL_INT>> Ai_row_index;
   std::vector<std::vector<double>> Ai_values;
+  std::vector<double> sData(nvtxs, 0.0);
+  std::vector<double> sMatrix(nvtxs * nvtxs, 0.0);
   Ai_col_index.resize(nparts);
   Ai_row_index.resize(nparts);
   Ai_values.resize(nparts);
-
 
   for (i = 0; i < nvtxs; ++i) {
     for (j = rows_start[i]; j < rows_end[i]; ++j) {
@@ -393,24 +393,68 @@ void System::formCEM() {
       } else {
         sData[i] += val[j] / cStar / cStar / 2;
       }
-      for (k = 0; k < nparts; ++k) {
-        if (verticesCEM[k].count(i) == 1 &&
-            verticesCEM[k].count(col_index[j]) == 1) {
-          if (col_index[j] < i) {
-            Ai_row_index[k].push_back(globalTolocalCEM[k][i]);
-            Ai_col_index[k].push_back(globalTolocalCEM[k][i]);
-            Ai_values[k].push_back(val[j]);
-          } else if (col_index[j] > i) {
-            Ai_row_index[k].push_back(globalTolocalCEM[k][i]);
-            Ai_col_index[k].push_back(globalTolocalCEM[k][i]);
-            Ai_values[k].push_back(val[j]);
-            Ai_row_index[k].push_back(globalTolocalCEM[k][i]);
-            Ai_col_index[k].push_back(globalTolocalCEM[k][col_index[j]]);
-            Ai_values[k].push_back(-val[j]);
+    }
+  }
+
+  for (i = 0; i < nparts; ++i) {
+    for (const auto &element1 : vertices[i]) {
+      for (const auto &element2 : vertices[i]) {
+        
+      }
+    }
+  } 
+
+
+  // for (i = 0; i < nvtxs; ++i) {
+  //   for (j = rows_start[i]; j < rows_end[i]; ++j) {
+  //     if (col_index[j] == i) {
+  //       sData[i] += val[j] / cStar / cStar;
+  //     } else {
+  //       sData[i] += val[j] / cStar / cStar / 2;
+  //     }
+  //     for (k = 0; k < nparts; ++k) {
+  //       if (verticesCEM[k].count(i) == 1 &&
+  //           verticesCEM[k].count(col_index[j]) == 1) {
+  //         if (col_index[j] < i) {
+  //           Ai_row_index[k].push_back(globalTolocalCEM[k][i]);
+  //           Ai_col_index[k].push_back(globalTolocalCEM[k][i]);
+  //           Ai_values[k].push_back(val[j]);
+  //         } else if (col_index[j] > i) {
+  //           Ai_row_index[k].push_back(globalTolocalCEM[k][i]);
+  //           Ai_col_index[k].push_back(globalTolocalCEM[k][i]);
+  //           Ai_values[k].push_back(val[j]);
+  //           Ai_row_index[k].push_back(globalTolocalCEM[k][i]);
+  //           Ai_col_index[k].push_back(globalTolocalCEM[k][col_index[j]]);
+  //           Ai_values[k].push_back(-val[j]);
+  //         } else {
+  //           Ai_row_index[k].push_back(globalTolocalCEM[k][i]);
+  //           Ai_col_index[k].push_back(globalTolocalCEM[k][i]);
+  //           Ai_values[k].push_back(val[j]);
+  //         }
+  //       }
+  //     }
+  //   }
+  // }
+
+  for (i = 0; i < nparts; ++i) {
+    for (const auto &element : verticesCEM[i]) {
+      for (j = rows_start[element]; j < rows_end[element]; ++j) {
+        if (verticesCEM[i].count(col_index[j]) == 1) {
+          if (col_index[j] < element) {
+            Ai_row_index[i].push_back(globalTolocalCEM[i][element]);
+            Ai_col_index[i].push_back(globalTolocalCEM[i][element]);
+            Ai_values[i].push_back(val[j]);
+          } else if (col_index[j] > element) {
+            Ai_row_index[i].push_back(globalTolocalCEM[i][element]);
+            Ai_col_index[i].push_back(globalTolocalCEM[i][element]);
+            Ai_values[i].push_back(val[j]);
+            Ai_row_index[i].push_back(globalTolocalCEM[i][element]);
+            Ai_col_index[i].push_back(globalTolocalCEM[i][col_index[j]]);
+            Ai_values[i].push_back(-val[j]);
           } else {
-            Ai_row_index[k].push_back(globalTolocalCEM[k][i]);
-            Ai_col_index[k].push_back(globalTolocalCEM[k][i]);
-            Ai_values[k].push_back(val[j]);
+            Ai_row_index[i].push_back(globalTolocalCEM[i][element]);
+            Ai_col_index[i].push_back(globalTolocalCEM[i][element]);
+            Ai_values[i].push_back(val[j]);
           }
         }
       }
@@ -419,27 +463,28 @@ void System::formCEM() {
 
   std::cout << "Finish forming Ai." << std::endl;
 
-  for (i = 0; i < nparts; ++i) {
-    for (const auto &element : overlapping[i]) {
-      for (const auto &element1 : vertices[element]) {
-        for (const auto &element2 : vertices[element]) {
-          if (globalTolocalCEM[i][element1] <= globalTolocalCEM[i][element2]) {
-            for (j = 0; j < k0; ++j) {
-              Ai_row_index[i].push_back(globalTolocalCEM[i][element1]);
-              Ai_col_index[i].push_back(globalTolocalCEM[i][element2]);
-              Ai_values[i].push_back(
-                  sData[globalTolocalCEM[i][element1]] *
-                  sData[globalTolocalCEM[i][element2]] *
-                  eigenvector[element][j * vertices[element].size() +
-                                       globalTolocal[element1]] *
-                  eigenvector[element][j * vertices[element].size() +
-                                       globalTolocal[element2]]);
-            }
-          }
-        }
-      }
-    }
-  }
+  // for (i = 0; i < nparts; ++i) {
+  //   for (const auto &element : overlapping[i]) {
+  //     for (const auto &element1 : vertices[element]) {
+  //       for (const auto &element2 : vertices[element]) {
+  //         if (globalTolocalCEM[i][element1] <= globalTolocalCEM[i][element2])
+  //         {
+  //           for (j = 0; j < k0; ++j) {
+  //             Ai_row_index[i].push_back(globalTolocalCEM[i][element1]);
+  //             Ai_col_index[i].push_back(globalTolocalCEM[i][element2]);
+  //             Ai_values[i].push_back(
+  //                 sData[globalTolocalCEM[i][element1]] *
+  //                 sData[globalTolocalCEM[i][element2]] *
+  //                 eigenvector[element][j * vertices[element].size() +
+  //                                      globalTolocal[element1]] *
+  //                 eigenvector[element][j * vertices[element].size() +
+  //                                      globalTolocal[element2]]);
+  //           }
+  //         }
+  //       }
+  //     }
+  //   }
+  // }
 
   std::cout << "Finish forming Si." << std::endl;
 
