@@ -10,15 +10,15 @@
 int main() {
   auto start = std::chrono::high_resolution_clock::now();
 
-  System sys(20, 20, 2);
+  System sys(400, 400, 2);
   sys.getData();
   sys.graphPartition();
   sys.formRHS();
   // sys.formA();
   // sys.solve();
   sys.findNeighbours();
-  // sys.formAUX();
-  // sys.formCEM();
+  sys.formAUX();
+  sys.formCEM();
 
   auto end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> duration = end - start;

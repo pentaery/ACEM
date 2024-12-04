@@ -351,21 +351,22 @@ void System::formAUX() {
     sparse_status_t error =
         mkl_sparse_d_gv(&which, pm, Ai[i], descr, Si[i], descr, k0, &k,
                         eigenvalue[i].data(), eigenvector[i].data(), &res[i]);
-    // if (error != 0) {
-    //   std::cout << "===========error in solving eigenvalue
-    //   problem==========="
-    //             << error << "===============" << std::endl;
-    // }
-    // if (k < k0) {
-    //   std::cout << "===========Not find enough eigenvalues==========="
-    //             << std::endl;
-    // }
-    std::cout << "part: " << i << " residual: " << res[i]
-              << " Smallest eigenvalue: " << eigenvalue[i][0] << std::endl;
+    if (error != 0) {
+      std::cout << "======error in " << error << "===============" << std::endl;
+    }
+    if (k < k0) {
+      std::cout << "===========Not find enough eigenvalues==========="
+                << std::endl;
+    }
+    // std::cout << "part: " << i << " residual: " << res[i]
+    //           << " Smallest eigenvalue: " << eigenvalue[i][0] << std::endl;
 
     mkl_sparse_destroy(Ai[i]);
     mkl_sparse_destroy(Si[i]);
   }
+
+  std::cout << "Finish solving eigen problem in each coarse element."
+            << std::endl;
 }
 
 void System::formCEM() {
@@ -383,6 +384,7 @@ void System::formCEM() {
   Ai_col_index.resize(nparts);
   Ai_row_index.resize(nparts);
   Ai_values.resize(nparts);
+
 
   for (i = 0; i < nvtxs; ++i) {
     for (j = rows_start[i]; j < rows_end[i]; ++j) {
@@ -415,6 +417,8 @@ void System::formCEM() {
     }
   }
 
+  std::cout << "Finish forming Ai." << std::endl;
+
   for (i = 0; i < nparts; ++i) {
     for (const auto &element : overlapping[i]) {
       for (const auto &element1 : vertices[element]) {
@@ -427,9 +431,9 @@ void System::formCEM() {
                   sData[globalTolocalCEM[i][element1]] *
                   sData[globalTolocalCEM[i][element2]] *
                   eigenvector[element][j * vertices[element].size() +
-                                       globalTolocalCEM[i][element1]] *
+                                       globalTolocal[element1]] *
                   eigenvector[element][j * vertices[element].size() +
-                                       globalTolocalCEM[i][element2]]);
+                                       globalTolocal[element2]]);
             }
           }
         }
@@ -437,34 +441,28 @@ void System::formCEM() {
     }
   }
 
-  std::vector<std::vector<std::vector<double>>> rhs;
+  std::cout << "Finish forming Si." << std::endl;
+
+  std::vector<std::vector<double>> rhs;
   rhs.resize(nparts);
   for (i = 0; i < nparts; ++i) {
-    rhs[i].resize(k0);
-  }
-  for (i = 0; i < k0; ++i) {
-    for (j = 0; j < nparts; ++j) {
-      rhs[j][i].resize(vertices[j].size());
-    }
+    rhs[i].resize(k0 * verticesCEM[i].size());
   }
   for (i = 0; i < nparts; ++i) {
-    for (j = 0; j < k0; ++j) {
-      std::fill(rhs[i][j].begin(), rhs[i][j].end(), 0);
-    }
+    std::fill(rhs[i].begin(), rhs[i].end(), 0);
   }
 
   for (i = 0; i < nparts; ++i) {
     for (j = 0; j < k0; ++j) {
       for (const auto &element : vertices[i]) {
-        rhs[i][j][globalTolocalCEM[i][element]] =
+        rhs[i][j * verticesCEM[i].size() + globalTolocalCEM[i][element]] =
             sData[globalTolocalCEM[i][element]] *
-            eigenvector[i]
-                       [j * vertices[i].size() + globalTolocal[element]];
+            eigenvector[i][j * vertices[i].size() + globalTolocal[element]];
       }
     }
   }
 
-  std::cout << "Ai_values[0].size(): " << Ai_values[2].size() << std::endl;
+  std::cout << "Ai_values[2].size(): " << Ai_values[2].size() << std::endl;
   std::vector<sparse_matrix_t> AiCOO;
   std::vector<sparse_matrix_t> Ai;
 
