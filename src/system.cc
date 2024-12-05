@@ -74,6 +74,8 @@ void System::getData() {
 }
 
 void System::graphPartition() {
+  auto start = std::chrono::high_resolution_clock::now();
+  std::cout << "======Phase I: Graph Partitioning======" << std::endl;
   MKL_INT *rows_start, *rows_end, *col_index;
   mkl_sparse_d_export_csr(matL, &indexing, &rows, &cols, &rows_start, &rows_end,
                           &col_index, &val);
@@ -86,7 +88,7 @@ void System::graphPartition() {
   options[METIS_OPTION_NCUTS] = 1;
   METIS_PartGraphKway(&nvtxs, &ncon, rows_start, col_index, NULL, NULL, NULL,
                       &nparts, NULL, NULL, NULL, &objval, part);
-  std::cout << "Finish partitioning with objval " << objval << std::endl;
+  std::cout << "Objective for the partition is " << objval << std::endl;
 
   FILE *fp;
   if ((fp = fopen("../../partition.txt", "wb")) == NULL) {
@@ -97,6 +99,11 @@ void System::graphPartition() {
     fprintf(fp, "%d ", part[i]);
   }
   fclose(fp);
+
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> duration = end - start;
+  std::cout << "======Finished with " << duration.count()
+            << " ms======" << std::endl;
 }
 
 void System::formA() {
@@ -156,6 +163,10 @@ void System::solve() {
 }
 
 void System::findNeighbours() {
+  auto start = std::chrono::high_resolution_clock::now();
+  std::cout
+      << "======Phase II: Construct the neighours for the CEM method======"
+      << std::endl;
   int i = 0, j = 0;
   for (i = 0; i < nvtxs; ++i) {
     vertices[part[i]].insert(i);
@@ -210,9 +221,16 @@ void System::findNeighbours() {
       }
     }
   }
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> duration = end - start;
+  std::cout << "======Finished with " << duration.count()
+            << " ms======" << std::endl;
 }
 
 void System::formAUX() {
+  auto start = std::chrono::high_resolution_clock::now();
+  std::cout << "======Phase III: Construct the Auxiliary space======"
+            << std::endl;
   MKL_INT *rows_start, *rows_end, *col_index;
   MKL_INT rows, cols;
   sparse_index_base_t indexing;
@@ -226,7 +244,6 @@ void System::formAUX() {
   mkl_sparse_ee_init(pm);
   pm[7] = 1;
   pm[8] = 1;
-  std::cout << "nparts: " << nparts << std::endl;
 
   std::vector<std::vector<MKL_INT>> Ai_col_index;
   std::vector<std::vector<MKL_INT>> Ai_row_index;
@@ -365,8 +382,11 @@ void System::formAUX() {
     mkl_sparse_destroy(Si[i]);
   }
 
-  std::cout << "Finish solving eigen problem in each coarse element."
-            << std::endl;
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> duration = end - start;
+
+  std::cout << "======Finish solving eigen problem in each coarse element with "
+            << duration.count() << " ms======" << std::endl;
 }
 
 void System::formCEM() {
@@ -381,10 +401,22 @@ void System::formCEM() {
   std::vector<std::vector<MKL_INT>> Ai_row_index;
   std::vector<std::vector<double>> Ai_values;
   std::vector<double> sData(nvtxs, 0.0);
-  std::vector<double> sMatrix(nvtxs * nvtxs, 0.0);
+  std::vector<std::vector<double>> sMatrix;
+  sMatrix.resize(nparts);
   Ai_col_index.resize(nparts);
   Ai_row_index.resize(nparts);
   Ai_values.resize(nparts);
+  for (i = 0; i < nparts; ++i) {
+    Ai_col_index[i].resize(verticesCEM[i].size() * verticesCEM[i].size() /
+                           overlapping[i].size());
+    Ai_row_index[i].resize(verticesCEM[i].size() * verticesCEM[i].size() /
+                           overlapping[i].size());
+    Ai_values[i].resize(verticesCEM[i].size() * verticesCEM[i].size() /
+                        overlapping[i].size());
+    std::cout << i << std::endl;
+  }
+
+  auto start = std::chrono::high_resolution_clock::now();
 
   for (i = 0; i < nvtxs; ++i) {
     for (j = rows_start[i]; j < rows_end[i]; ++j) {
@@ -396,95 +428,82 @@ void System::formCEM() {
     }
   }
 
+  auto p1 = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> duration1 = p1 - start;
+  std::cout << "======Getting mass matrix with " << duration1.count()
+            << " ms======" << std::endl;
+
   for (i = 0; i < nparts; ++i) {
+    sMatrix[i].resize(vertices[i].size() * vertices[i].size());
     for (const auto &element1 : vertices[i]) {
       for (const auto &element2 : vertices[i]) {
-        
+        sMatrix[i][globalTolocal[element1] * vertices[i].size() +
+                   globalTolocal[element2]] = 0.0;
+        for (j = 0; j < k0; ++j) {
+          sMatrix[i][globalTolocal[element1] * vertices[i].size() +
+                     globalTolocal[element2]] +=
+              eigenvector[i][j * vertices[i].size() + globalTolocal[element1]] *
+              eigenvector[i][j * vertices[i].size() + globalTolocal[element2]] *
+              sData[element1] * sData[element2];
+        }
       }
     }
-  } 
+  }
 
+  auto p2 = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> duration2 = p2 - p1;
+  std::cout << "======Getting S matrix with " << duration2.count()
+            << " ms======" << std::endl;
 
-  // for (i = 0; i < nvtxs; ++i) {
-  //   for (j = rows_start[i]; j < rows_end[i]; ++j) {
-  //     if (col_index[j] == i) {
-  //       sData[i] += val[j] / cStar / cStar;
-  //     } else {
-  //       sData[i] += val[j] / cStar / cStar / 2;
-  //     }
-  //     for (k = 0; k < nparts; ++k) {
-  //       if (verticesCEM[k].count(i) == 1 &&
-  //           verticesCEM[k].count(col_index[j]) == 1) {
-  //         if (col_index[j] < i) {
-  //           Ai_row_index[k].push_back(globalTolocalCEM[k][i]);
-  //           Ai_col_index[k].push_back(globalTolocalCEM[k][i]);
-  //           Ai_values[k].push_back(val[j]);
-  //         } else if (col_index[j] > i) {
-  //           Ai_row_index[k].push_back(globalTolocalCEM[k][i]);
-  //           Ai_col_index[k].push_back(globalTolocalCEM[k][i]);
-  //           Ai_values[k].push_back(val[j]);
-  //           Ai_row_index[k].push_back(globalTolocalCEM[k][i]);
-  //           Ai_col_index[k].push_back(globalTolocalCEM[k][col_index[j]]);
-  //           Ai_values[k].push_back(-val[j]);
-  //         } else {
-  //           Ai_row_index[k].push_back(globalTolocalCEM[k][i]);
-  //           Ai_col_index[k].push_back(globalTolocalCEM[k][i]);
-  //           Ai_values[k].push_back(val[j]);
-  //         }
-  //       }
-  //     }
-  //   }
-  // }
-
+  int index1 = 0;
+  int index2 = 0;
+  int index3 = 0;
   for (i = 0; i < nparts; ++i) {
     for (const auto &element : verticesCEM[i]) {
       for (j = rows_start[element]; j < rows_end[element]; ++j) {
         if (verticesCEM[i].count(col_index[j]) == 1) {
           if (col_index[j] < element) {
-            Ai_row_index[i].push_back(globalTolocalCEM[i][element]);
-            Ai_col_index[i].push_back(globalTolocalCEM[i][element]);
-            Ai_values[i].push_back(val[j]);
+            Ai_row_index[i][index1++] = (globalTolocalCEM[i][element]);
+            Ai_col_index[i][index2++] = (globalTolocalCEM[i][element]);
+            Ai_values[i][index3++] = (val[j]);
           } else if (col_index[j] > element) {
-            Ai_row_index[i].push_back(globalTolocalCEM[i][element]);
-            Ai_col_index[i].push_back(globalTolocalCEM[i][element]);
-            Ai_values[i].push_back(val[j]);
-            Ai_row_index[i].push_back(globalTolocalCEM[i][element]);
-            Ai_col_index[i].push_back(globalTolocalCEM[i][col_index[j]]);
-            Ai_values[i].push_back(-val[j]);
+            Ai_row_index[i][index1++] = (globalTolocalCEM[i][element]);
+            Ai_col_index[i][index2++] = (globalTolocalCEM[i][element]);
+            Ai_values[i][index3++] = (val[j]);
+            Ai_row_index[i][index1++] = (globalTolocalCEM[i][element]);
+            Ai_col_index[i][index2++] = (globalTolocalCEM[i][col_index[j]]);
+            Ai_values[i][index3++] = (-val[j]);
           } else {
-            Ai_row_index[i].push_back(globalTolocalCEM[i][element]);
-            Ai_col_index[i].push_back(globalTolocalCEM[i][element]);
-            Ai_values[i].push_back(val[j]);
+            Ai_row_index[i][index1++] = (globalTolocalCEM[i][element]);
+            Ai_col_index[i][index2++] = (globalTolocalCEM[i][element]);
+            Ai_values[i][index3++] = (val[j]);
           }
         }
       }
     }
   }
 
-  std::cout << "Finish forming Ai." << std::endl;
+  auto p3 = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> duration3 = p3 - p2;
+  std::cout << "======Getting Ai matrix with " << duration3.count()
+            << " ms======" << std::endl;
 
-  // for (i = 0; i < nparts; ++i) {
-  //   for (const auto &element : overlapping[i]) {
-  //     for (const auto &element1 : vertices[element]) {
-  //       for (const auto &element2 : vertices[element]) {
-  //         if (globalTolocalCEM[i][element1] <= globalTolocalCEM[i][element2])
-  //         {
-  //           for (j = 0; j < k0; ++j) {
-  //             Ai_row_index[i].push_back(globalTolocalCEM[i][element1]);
-  //             Ai_col_index[i].push_back(globalTolocalCEM[i][element2]);
-  //             Ai_values[i].push_back(
-  //                 sData[globalTolocalCEM[i][element1]] *
-  //                 sData[globalTolocalCEM[i][element2]] *
-  //                 eigenvector[element][j * vertices[element].size() +
-  //                                      globalTolocal[element1]] *
-  //                 eigenvector[element][j * vertices[element].size() +
-  //                                      globalTolocal[element2]]);
-  //           }
-  //         }
-  //       }
-  //     }
-  //   }
-  // }
+  for (i = 0; i < nparts; ++i) {
+    for (const auto &element : overlapping[i]) {
+      for (const auto &element1 : vertices[element]) {
+        for (const auto &element2 : vertices[element]) {
+          if (globalTolocalCEM[i][element1] <= globalTolocalCEM[i][element2]) {
+            Ai_row_index[i].push_back(globalTolocalCEM[i][element1]);
+            Ai_col_index[i].push_back(globalTolocalCEM[i][element2]);
+            Ai_values[i].push_back(
+                sMatrix[element]
+                       [globalTolocal[element1] * vertices[element].size() +
+                        globalTolocal[element2]]);
+          }
+        }
+      }
+    }
+  }
 
   std::cout << "Finish forming Si." << std::endl;
 

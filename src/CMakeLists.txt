@@ -1,4 +1,5 @@
 include_directories(/home/pentaery/local/include)
+include_directories(../tqdm)
 
 find_package(MKL REQUIRED)
 find_package(OpenMP REQUIRED)
