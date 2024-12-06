@@ -397,27 +397,7 @@ void System::formCEM() {
                           &col_index, &val);
   int i = 0, j = 0, k = 0;
 
-  std::vector<std::vector<MKL_INT>> Ai_col_index;
-  std::vector<std::vector<MKL_INT>> Ai_row_index;
-  std::vector<std::vector<double>> Ai_values;
   std::vector<double> sData(nvtxs, 0.0);
-  std::vector<std::vector<double>> sMatrix;
-  sMatrix.resize(nparts);
-  Ai_col_index.resize(nparts);
-  Ai_row_index.resize(nparts);
-  Ai_values.resize(nparts);
-  for (i = 0; i < nparts; ++i) {
-    Ai_col_index[i].resize(verticesCEM[i].size() * verticesCEM[i].size() /
-                           overlapping[i].size());
-    Ai_row_index[i].resize(verticesCEM[i].size() * verticesCEM[i].size() /
-                           overlapping[i].size());
-    Ai_values[i].resize(verticesCEM[i].size() * verticesCEM[i].size() /
-                        overlapping[i].size());
-    std::cout << i << std::endl;
-  }
-
-  auto start = std::chrono::high_resolution_clock::now();
-
   for (i = 0; i < nvtxs; ++i) {
     for (j = rows_start[i]; j < rows_end[i]; ++j) {
       if (col_index[j] == i) {
@@ -428,11 +408,8 @@ void System::formCEM() {
     }
   }
 
-  auto p1 = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double, std::milli> duration1 = p1 - start;
-  std::cout << "======Getting mass matrix with " << duration1.count()
-            << " ms======" << std::endl;
-
+  std::vector<std::vector<double>> sMatrix;
+  sMatrix.resize(nparts);
   for (i = 0; i < nparts; ++i) {
     sMatrix[i].resize(vertices[i].size() * vertices[i].size());
     for (const auto &element1 : vertices[i]) {
@@ -450,83 +427,75 @@ void System::formCEM() {
     }
   }
 
-  auto p2 = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double, std::milli> duration2 = p2 - p1;
-  std::cout << "======Getting S matrix with " << duration2.count()
-            << " ms======" << std::endl;
-
-  int index1 = 0;
-  int index2 = 0;
-  int index3 = 0;
   for (i = 0; i < nparts; ++i) {
+    std::vector<MKL_INT> Ai_col_index(
+        verticesCEM[i].size() * verticesCEM[i].size() / overlapping[i].size(),
+        0);
+    std::vector<MKL_INT> Ai_row_index(
+        verticesCEM[i].size() * verticesCEM[i].size() / overlapping[i].size(),
+        0);
+    std::vector<double> Ai_values(
+        verticesCEM[i].size() * verticesCEM[i].size() / overlapping[i].size(),
+        0);
+    int index1 = 0;
+    int index2 = 0;
+    int index3 = 0;
+
     for (const auto &element : verticesCEM[i]) {
       for (j = rows_start[element]; j < rows_end[element]; ++j) {
         if (verticesCEM[i].count(col_index[j]) == 1) {
           if (col_index[j] < element) {
-            Ai_row_index[i][index1++] = (globalTolocalCEM[i][element]);
-            Ai_col_index[i][index2++] = (globalTolocalCEM[i][element]);
-            Ai_values[i][index3++] = (val[j]);
+            Ai_row_index[index1++] = (globalTolocalCEM[i][element]);
+            Ai_col_index[index2++] = (globalTolocalCEM[i][element]);
+            Ai_values[index3++] = (val[j]);
           } else if (col_index[j] > element) {
-            Ai_row_index[i][index1++] = (globalTolocalCEM[i][element]);
-            Ai_col_index[i][index2++] = (globalTolocalCEM[i][element]);
-            Ai_values[i][index3++] = (val[j]);
-            Ai_row_index[i][index1++] = (globalTolocalCEM[i][element]);
-            Ai_col_index[i][index2++] = (globalTolocalCEM[i][col_index[j]]);
-            Ai_values[i][index3++] = (-val[j]);
+            Ai_row_index[index1++] = (globalTolocalCEM[i][element]);
+            Ai_col_index[index2++] = (globalTolocalCEM[i][element]);
+            Ai_values[index3++] = (val[j]);
+            Ai_row_index[index1++] = (globalTolocalCEM[i][element]);
+            Ai_col_index[index2++] = (globalTolocalCEM[i][col_index[j]]);
+            Ai_values[index3++] = (-val[j]);
           } else {
-            Ai_row_index[i][index1++] = (globalTolocalCEM[i][element]);
-            Ai_col_index[i][index2++] = (globalTolocalCEM[i][element]);
-            Ai_values[i][index3++] = (val[j]);
+            Ai_row_index[index1++] = (globalTolocalCEM[i][element]);
+            Ai_col_index[index2++] = (globalTolocalCEM[i][element]);
+            Ai_values[index3++] = (val[j]);
           }
         }
       }
     }
-  }
 
-  auto p3 = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double, std::milli> duration3 = p3 - p2;
-  std::cout << "======Getting Ai matrix with " << duration3.count()
-            << " ms======" << std::endl;
-
-  for (i = 0; i < nparts; ++i) {
     for (const auto &element : overlapping[i]) {
       for (const auto &element1 : vertices[element]) {
         for (const auto &element2 : vertices[element]) {
           if (globalTolocalCEM[i][element1] <= globalTolocalCEM[i][element2]) {
-            Ai_row_index[i].push_back(globalTolocalCEM[i][element1]);
-            Ai_col_index[i].push_back(globalTolocalCEM[i][element2]);
-            Ai_values[i].push_back(
+            Ai_row_index[index1++] = globalTolocalCEM[i][element1];
+            Ai_col_index[index2++] = globalTolocalCEM[i][element2];
+            Ai_values[index3++] =
                 sMatrix[element]
                        [globalTolocal[element1] * vertices[element].size() +
-                        globalTolocal[element2]]);
+                        globalTolocal[element2]];
           }
         }
       }
     }
-  }
 
-  std::cout << "Finish forming Si." << std::endl;
+    Ai_row_index.resize(index1);
+    Ai_col_index.resize(index2);
+    Ai_values.resize(index3);
 
-  std::vector<std::vector<double>> rhs;
-  rhs.resize(nparts);
-  for (i = 0; i < nparts; ++i) {
-    rhs[i].resize(k0 * verticesCEM[i].size());
-  }
-  for (i = 0; i < nparts; ++i) {
-    std::fill(rhs[i].begin(), rhs[i].end(), 0);
-  }
-
-  for (i = 0; i < nparts; ++i) {
+    std::vector<double> rhs(verticesCEM[i].size() * k0, 0.0);
     for (j = 0; j < k0; ++j) {
       for (const auto &element : vertices[i]) {
-        rhs[i][j * verticesCEM[i].size() + globalTolocalCEM[i][element]] =
+        rhs[j * verticesCEM[i].size() + globalTolocalCEM[i][element]] =
             sData[globalTolocalCEM[i][element]] *
             eigenvector[i][j * vertices[i].size() + globalTolocal[element]];
       }
     }
+
+    std::cout << "size: " << index1 << " " << index2 << " " << index3
+              << std::endl;
   }
 
-  std::cout << "Ai_values[2].size(): " << Ai_values[2].size() << std::endl;
   std::vector<sparse_matrix_t> AiCOO;
   std::vector<sparse_matrix_t> Ai;
 
