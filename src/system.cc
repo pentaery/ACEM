@@ -7,6 +7,7 @@
 #include <vector>
 
 void System::formRHS() {
+  vecRHS.resize(nvtxs);
   double gridLength = 1.0 / (size - 1);
   for (int row = 0; row < size; ++row) {
     for (int col = 0; col < size; ++col) {
@@ -150,12 +151,21 @@ void System::solve() {
   mkl_sparse_d_export_csr(matA, &indexing, &rows, &cols, &rows_start, &rows_end,
                           &col_index, &val);
 
+  MKL_INT perm[64], iparm[64];
+  void *pt[64];
   MKL_INT error;
-
   MKL_INT maxfct = 1, mnum = 1, mtype = 2, phase = 13;
   MKL_INT nrhs = 1, msglv1 = 1;
-
-  MKL_INT idum;
+  int i;
+  for (i = 0; i < 64; i++) {
+    pt[i] = 0;
+  }
+  for (i = 0; i < 64; i++) {
+    iparm[i] = 0;
+  }
+  iparm[34] = 1;
+  iparm[0] = 1;
+  vecSOL.resize(nvtxs);
   pardiso(pt, &maxfct, &mnum, &mtype, &phase, &nvtxs, val, rows_start,
           col_index, perm, &nrhs, iparm, &msglv1, vecRHS.data(), vecSOL.data(),
           &error);
@@ -170,10 +180,12 @@ void System::findNeighbours() {
       << "======Phase II: Construct the neighours for the CEM method======"
       << std::endl;
   int i = 0, j = 0;
+  vertices.resize(nparts);
   for (i = 0; i < nvtxs; ++i) {
     vertices[part[i]].insert(i);
   }
 
+  neighbours.resize(nparts);
   MKL_INT *rows_start, *rows_end, *col_index;
   mkl_sparse_d_export_csr(matL, &indexing, &rows, &cols, &rows_start, &rows_end,
                           &col_index, &val);
@@ -184,7 +196,7 @@ void System::findNeighbours() {
       }
     }
   }
-
+  overlapping.resize(nparts);
   if (overlap > 0) {
     for (j = 0; j < nparts; ++j) {
       overlapping[j].insert(neighbours[j].begin(), neighbours[j].end());
@@ -446,6 +458,8 @@ void System::formCEM() {
 
     // Forming the matrix A_i
     for (const auto &element : verticesCEM[i]) {
+      std::cout << "element: " << element
+                << " index: " << globalTolocalCEM[i][element] << std::endl;
       for (j = rows_start[element]; j < rows_end[element]; ++j) {
         if (verticesCEM[i].count(col_index[j]) == 1) {
           if (col_index[j] < element) {
@@ -469,20 +483,21 @@ void System::formCEM() {
     }
 
     // Forming the matrix S_i
-    for (const auto &element : overlapping[i]) {
-      for (const auto &element1 : vertices[element]) {
-        for (const auto &element2 : vertices[element]) {
-          if (globalTolocalCEM[i][element1] <= globalTolocalCEM[i][element2]) {
-            Ai_row_index[index1++] = globalTolocalCEM[i][element1];
-            Ai_col_index[index2++] = globalTolocalCEM[i][element2];
-            Ai_values[index3++] =
-                sMatrix[element]
-                       [globalTolocal[element1] * vertices[element].size() +
-                        globalTolocal[element2]];
-          }
-        }
-      }
-    }
+    // for (const auto &element : overlapping[i]) {
+    //   for (const auto &element1 : vertices[element]) {
+    //     for (const auto &element2 : vertices[element]) {
+    //       if (globalTolocalCEM[i][element1] <= globalTolocalCEM[i][element2])
+    //       {
+    //         Ai_row_index[index1++] = globalTolocalCEM[i][element1];
+    //         Ai_col_index[index2++] = globalTolocalCEM[i][element2];
+    //         Ai_values[index3++] =
+    //             sMatrix[element]
+    //                    [globalTolocal[element1] * vertices[element].size() +
+    //                     globalTolocal[element2]];
+    //       }
+    //     }
+    //   }
+    // }
 
     Ai_row_index.resize(index1);
     Ai_col_index.resize(index2);
@@ -506,25 +521,26 @@ void System::formCEM() {
                             Ai_values.data());
     mkl_sparse_convert_csr(AiCOO, SPARSE_OPERATION_NON_TRANSPOSE, &Ai);
 
-    mkl_sparse_d_export_csr(Ai, &indexing, &rows, &cols, &rows_start, &rows_end,
-                            &col_index, &val);
-    for(j = 0; j < 200; ++j) {
-      std::cout << rows_start[j] << " ";
+    MKL_INT *rows_start_new, *rows_end_new, *col_index_new;
+    MKL_INT rows_new, cols_new;
+    double *val_new;
+    mkl_sparse_d_export_csr(Ai, &indexing, &rows_new, &cols_new,
+                            &rows_start_new, &rows_end_new, &col_index_new,
+                            &val_new);
+    for (j = 0; j < 80; ++j) {
+      std::cout << rows_start_new[j] << " ";
     }
     std::cout << std::endl;
-    for(j = 0; j < 200; ++j) {
-      std::cout << col_index[j] << " ";
+    for (j = 0; j < 212; ++j) {
+      std::cout << col_index_new[j] << " ";
     }
 
     std::cout << std::endl;
-    for(j = 0; j < 200; ++j) {
-      std::cout << val[j] << " ";
+    for (j = 0; j < 212; ++j) {
+      std::cout << val_new[j] << " ";
     }
     std::cout << std::endl;
 
-
-
-    
     std::cout << "Finish forming the matrix A_i and S_i in part " << i
               << std::endl;
     MKL_INT error;
@@ -533,16 +549,26 @@ void System::formCEM() {
     MKL_INT msglv1 = 1;
 
     MKL_INT idum;
+    MKL_INT perm[64], iparm[64];
+    void *pt[64];
+    for (j = 0; j < 64; j++) {
+      pt[j] = 0;
+    }
+    for (j = 0; j < 64; j++) {
+      iparm[j] = 0;
+    }
+    iparm[34] = 1;
+    iparm[0] = 1;
     cemBasis.resize(nparts);
     cemBasis[i].resize(verticesCEM[i].size() * k0);
-
+    MKL_INT n = verticesCEM[i].size();
 
     std::cout << "rhs size: " << rhs.size() << std::endl;
     std::cout << "Matrix size: " << rows << " " << cols << std::endl;
 
     std::cout << "Start solving the system in part " << i << std::endl;
-    pardiso(pt, &maxfct, &mnum, &mtype, &phase, &nvtxs, val, rows_start,
-            col_index, perm, &k0, iparm, &msglv1, rhs.data(),
+    pardiso(pt, &maxfct, &mnum, &mtype, &phase, &n, val_new, rows_start_new,
+            col_index_new, perm, &k0, iparm, &msglv1, rhs.data(),
             cemBasis[i].data(), &error);
     if (error != 0) {
       std::cout << "error in pardiso: " << error << std::endl;
@@ -553,27 +579,14 @@ void System::formCEM() {
   }
 }
 
+void ::System::formCEM2() {}
+
 System::System() {
   size = 512;
   indexing = SPARSE_INDEX_BASE_ZERO;
-  int i;
-  for (i = 0; i < 64; i++) {
-    pt[i] = 0;
-  }
-  for (i = 0; i < 64; i++) {
-    iparm[i] = 0;
-  }
-  iparm[34] = 1;
-  iparm[0] = 1;
   nvtxs = size * size;
-  vecSOL.resize(size * size);
-  vecRHS.resize(size * size);
-  matM.resize(size * size);
   nparts = 10;
   part = new int[nvtxs];
-  vertices.resize(nparts);
-  neighbours.resize(nparts);
-  overlapping.resize(nparts);
   overlap = 2;
   cStar = 1.0;
   k0 = 3;
@@ -582,24 +595,9 @@ System::System() {
 System::System(MKL_INT size) {
   this->size = size;
   indexing = SPARSE_INDEX_BASE_ZERO;
-  int i;
-  for (i = 0; i < 64; i++) {
-    pt[i] = 0;
-  }
-  for (i = 0; i < 64; i++) {
-    iparm[i] = 0;
-  }
-  iparm[34] = 1;
-  iparm[0] = 1;
   nvtxs = size * size;
-  vecSOL.resize(size * size);
-  vecRHS.resize(size * size);
-  matM.resize(size * size);
   nparts = 10;
   part = new int[nvtxs];
-  vertices.resize(nparts);
-  neighbours.resize(nparts);
-  overlapping.resize(nparts);
   overlap = 2;
   cStar = 1.0;
   k0 = 3;
@@ -609,23 +607,8 @@ System::System(MKL_INT size, idx_t nparts) {
   this->size = size;
   this->nparts = nparts;
   indexing = SPARSE_INDEX_BASE_ZERO;
-  int i;
-  for (i = 0; i < 64; i++) {
-    pt[i] = 0;
-  }
-  for (i = 0; i < 64; i++) {
-    iparm[i] = 0;
-  }
-  iparm[34] = 1;
-  iparm[0] = 1;
   nvtxs = size * size;
-  vecSOL.resize(size * size);
-  vecRHS.resize(size * size);
-  matM.resize(size * size);
   part = new int[nvtxs];
-  vertices.resize(nparts);
-  neighbours.resize(nparts);
-  overlapping.resize(nparts);
   overlap = 2;
   cStar = 1.0;
   k0 = 3;
@@ -636,27 +619,19 @@ System::System(MKL_INT size, idx_t nparts, int overlap) {
   this->size = size;
   this->nparts = nparts;
   indexing = SPARSE_INDEX_BASE_ZERO;
-  int i;
-  for (i = 0; i < 64; i++) {
-    pt[i] = 0;
-  }
-  for (i = 0; i < 64; i++) {
-    iparm[i] = 0;
-  }
-  iparm[34] = 1;
-  iparm[0] = 1;
   nvtxs = size * size;
-  vecSOL.resize(size * size);
-  vecRHS.resize(size * size);
-  matM.resize(size * size);
   part = new int[nvtxs];
-  vertices.resize(nparts);
-  neighbours.resize(nparts);
-  overlapping.resize(nparts);
   cStar = 1.0;
   k0 = 3;
 }
-//     fprintf(fp, "%d ", part[i]);
-//   }
-//   fclose(fp);
-// }
+
+System::System(MKL_INT size, idx_t nparts, int overlap, int k0) {
+  this->k0 = k0;
+  this->overlap = overlap;
+  this->size = size;
+  this->nparts = nparts;
+  indexing = SPARSE_INDEX_BASE_ZERO;
+  nvtxs = size * size;
+  part = new int[nvtxs];
+  cStar = 1.0;
+}
