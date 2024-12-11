@@ -30,7 +30,7 @@ void System::getData() {
         row_indx.push_back(index);
         col_indx.push_back(index);
         values.push_back(2.0);
-      } else if (col + row == size - 1) {
+      } else if (col == 0 || col == size - 1 || row == 0 || row == size - 1) {
         row_indx.push_back(index);
         col_indx.push_back(index);
         values.push_back(1.0);
@@ -442,62 +442,67 @@ void System::formCEM() {
   }
 
   // Calculating CEM Basis in each overlapping area
-  for (i = 0; i < 1; ++i) {
-    std::vector<MKL_INT> Ai_col_index(
-        verticesCEM[i].size() * verticesCEM[i].size() / overlapping[i].size(),
-        0);
-    std::vector<MKL_INT> Ai_row_index(
-        verticesCEM[i].size() * verticesCEM[i].size() / overlapping[i].size(),
-        0);
-    std::vector<double> Ai_values(
-        verticesCEM[i].size() * verticesCEM[i].size() / overlapping[i].size(),
-        0);
+// #pragma omp parallel for
+  for (i = 0; i < nparts; ++i) {
+    std::vector<MKL_INT> Ai_col_index(2 * verticesCEM[i].size() *
+                                          verticesCEM[i].size() /
+                                          overlapping[i].size(),
+                                      0);
+    std::vector<MKL_INT> Ai_row_index(2 * verticesCEM[i].size() *
+                                          verticesCEM[i].size() /
+                                          overlapping[i].size(),
+                                      0);
+    std::vector<double> Ai_values(2 * verticesCEM[i].size() *
+                                      verticesCEM[i].size() /
+                                      overlapping[i].size(),
+                                  0);
     int index1 = 0;
     int index2 = 0;
     int index3 = 0;
 
     // Forming the matrix A_i
     for (const auto &element : verticesCEM[i]) {
-      std::cout << "element: " << element
-                << " index: " << globalTolocalCEM[i][element] << std::endl;
+      // std::cout << "element: " << element
+      //           << " index: " << globalTolocalCEM[i][element] << std::endl;
       for (j = rows_start[element]; j < rows_end[element]; ++j) {
         if (verticesCEM[i].count(col_index[j]) == 1) {
-          if (col_index[j] < element) {
+          // std::cout << " element :" << col_index[j];
+          if (globalTolocalCEM[i][col_index[j]] <=
+              globalTolocalCEM[i][element]) {
             Ai_row_index[index1++] = (globalTolocalCEM[i][element]);
             Ai_col_index[index2++] = (globalTolocalCEM[i][element]);
-            Ai_values[index3++] = (val[j]);
-          } else if (col_index[j] > element) {
-            Ai_row_index[index1++] = (globalTolocalCEM[i][element]);
-            Ai_col_index[index2++] = (globalTolocalCEM[i][element]);
-            Ai_values[index3++] = (val[j]);
-            Ai_row_index[index1++] = (globalTolocalCEM[i][element]);
-            Ai_col_index[index2++] = (globalTolocalCEM[i][col_index[j]]);
-            Ai_values[index3++] = (-val[j]);
+            Ai_values[index3++] = val[j];
+            // std::cout << " " << val[j];
           } else {
             Ai_row_index[index1++] = (globalTolocalCEM[i][element]);
             Ai_col_index[index2++] = (globalTolocalCEM[i][element]);
-            Ai_values[index3++] = (val[j]);
+            Ai_values[index3++] = val[j];
+            Ai_row_index[index1++] = (globalTolocalCEM[i][element]);
+            Ai_col_index[index2++] = (globalTolocalCEM[i][col_index[j]]);
+            Ai_values[index3++] = -val[j];
+            // std::cout << " " << val[j];
+          }
+        }
+      }
+      // std::cout << std::endl;
+    }
+
+    // Forming the matrix S_i
+    for (const auto &element : overlapping[i]) {
+      for (const auto &element1 : vertices[element]) {
+        for (const auto &element2 : vertices[element]) {
+          if (globalTolocalCEM[i][element1] <= globalTolocalCEM[i][element2])
+          {
+            Ai_row_index[index1++] = globalTolocalCEM[i][element1];
+            Ai_col_index[index2++] = globalTolocalCEM[i][element2];
+            Ai_values[index3++] =
+                sMatrix[element]
+                       [globalTolocal[element1] * vertices[element].size() +
+                        globalTolocal[element2]];
           }
         }
       }
     }
-
-    // Forming the matrix S_i
-    // for (const auto &element : overlapping[i]) {
-    //   for (const auto &element1 : vertices[element]) {
-    //     for (const auto &element2 : vertices[element]) {
-    //       if (globalTolocalCEM[i][element1] <= globalTolocalCEM[i][element2])
-    //       {
-    //         Ai_row_index[index1++] = globalTolocalCEM[i][element1];
-    //         Ai_col_index[index2++] = globalTolocalCEM[i][element2];
-    //         Ai_values[index3++] =
-    //             sMatrix[element]
-    //                    [globalTolocal[element1] * vertices[element].size() +
-    //                     globalTolocal[element2]];
-    //       }
-    //     }
-    //   }
-    // }
 
     Ai_row_index.resize(index1);
     Ai_col_index.resize(index2);
@@ -527,18 +532,18 @@ void System::formCEM() {
     mkl_sparse_d_export_csr(Ai, &indexing, &rows_new, &cols_new,
                             &rows_start_new, &rows_end_new, &col_index_new,
                             &val_new);
-    for (j = 0; j < 80; ++j) {
-      std::cout << rows_start_new[j] << " ";
-    }
-    std::cout << std::endl;
-    for (j = 0; j < 212; ++j) {
-      std::cout << col_index_new[j] << " ";
-    }
+    // for (j = 0; j < 80; ++j) {
+    //   std::cout << rows_start_new[j] << " ";
+    // }
+    // std::cout << std::endl;
+    // for (j = 0; j < 212; ++j) {
+    //   std::cout << col_index_new[j] << " ";
+    // }
 
-    std::cout << std::endl;
-    for (j = 0; j < 212; ++j) {
-      std::cout << val_new[j] << " ";
-    }
+    // std::cout << std::endl;
+    // for (j = 0; j < 212; ++j) {
+    //   std::cout << val_new[j] << " ";
+    // }
     std::cout << std::endl;
 
     std::cout << "Finish forming the matrix A_i and S_i in part " << i
@@ -546,7 +551,7 @@ void System::formCEM() {
     MKL_INT error;
 
     MKL_INT maxfct = 1, mnum = 1, mtype = 2, phase = 13;
-    MKL_INT msglv1 = 1;
+    MKL_INT msglv1 = 0;
 
     MKL_INT idum;
     MKL_INT perm[64], iparm[64];
@@ -564,7 +569,7 @@ void System::formCEM() {
     MKL_INT n = verticesCEM[i].size();
 
     std::cout << "rhs size: " << rhs.size() << std::endl;
-    std::cout << "Matrix size: " << rows << " " << cols << std::endl;
+    std::cout << "Matrix size: " << rows_new << " " << cols_new << std::endl;
 
     std::cout << "Start solving the system in part " << i << std::endl;
     pardiso(pt, &maxfct, &mnum, &mtype, &phase, &n, val_new, rows_start_new,
