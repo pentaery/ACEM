@@ -12,76 +12,55 @@
 
 int main() {
 
-  std::vector<MKL_INT> A_row_index = {0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2};
-  std::vector<MKL_INT> A_col_index = {0, 0, 1, 1, 0, 1, 1, 2, 2, 1, 2};
-  std::vector<double> A_values = {2, 1, -1, 1, -1, 0, 1, -1, 1, -1, 1};
+  int i, j;
 
-  std::vector<MKL_INT> A2_row_index = {0, 0, 1, 1, 1, 2, 2};
-  std::vector<MKL_INT> A2_col_index = {0, 1, 0, 1, 2, 1, 2};
-  std::vector<double> A2_values = {3, -1, -1, 2, -1, -1, 2};
-
-  std::vector<MKL_INT> S_row_index = {0, 0, 1, 1, 1, 2, 2};
-  std::vector<MKL_INT> S_col_index = {0, 0, 1, 1, 1, 2, 2};
-  std::vector<double> S_values = {2, 0.5, 0.5, 0, 0.5, 0.5, 1};
+  std::vector<MKL_INT> A_row_index = {0, 0, 1, 1, 2};
+  std::vector<MKL_INT> A_col_index = {0, 1, 1, 2, 2};
+  std::vector<double> A_values = {2, -1, 2, -1, 2};
+  std::vector<double> rhs = {1, 0, 0};
+  std::vector<double> sol = {0, 0, 0};
 
   sparse_index_base_t indexing = SPARSE_INDEX_BASE_ZERO;
-  sparse_matrix_t Ai, Si;
-  sparse_matrix_t AiCOO = NULL, SiCOO = NULL;
-  mkl_sparse_d_create_coo(&AiCOO, indexing, 3, 3, 11, A_row_index.data(),
+  sparse_matrix_t Ai;
+  sparse_matrix_t AiCOO;
+  mkl_sparse_d_create_coo(&AiCOO, indexing, 3, 3, 5, A_row_index.data(),
                           A_col_index.data(), A_values.data());
-  mkl_sparse_d_create_coo(&SiCOO, indexing, 3, 3, 7, S_row_index.data(),
-                          S_col_index.data(), S_values.data());
-
   mkl_sparse_convert_csr(AiCOO, SPARSE_OPERATION_NON_TRANSPOSE, &Ai);
-  mkl_sparse_convert_csr(SiCOO, SPARSE_OPERATION_NON_TRANSPOSE, &Si);
 
   int rows, cols;
-  int *rows_start, *rows_end, *col_indx;
-  double *values;
+  int *rows_start, *rows_end, *col_index;
+  double *val;
 
   mkl_sparse_d_export_csr(Ai, &indexing, &rows, &cols, &rows_start, &rows_end,
-                          &col_indx, &values);
-  int i;
-  for (i = 0; i < 7; ++i) {
-    std::cout << rows_start[i] << " ";
+                          &col_index, &val);
+
+  MKL_INT error;
+
+  MKL_INT maxfct = 1, mnum = 1, mtype = 2, phase = 13;
+  MKL_INT msglv1 = 1;
+
+  MKL_INT idum;
+  MKL_INT perm[64], iparm[64];
+  void *pt[64];
+  for (j = 0; j < 64; j++) {
+    pt[j] = 0;
   }
-  std::cout << std::endl;
-  for (i = 0; i < 7; ++i) {
-    std::cout << col_indx[i] << " ";
+  for (j = 0; j < 64; j++) {
+    iparm[j] = 0;
   }
-  std::cout << std::endl;
+  iparm[34] = 1;
+  iparm[0] = 1;
 
-  for (i = 0; i < 7; ++i) {
-    std::cout << values[i] << " ";
-  }
-  std::cout << std::endl;
+  int n = 3;
+  int k = 1;
 
-  char which = 'S';
-  MKL_INT pm[128];
-  mkl_sparse_ee_init(pm);
-  // pm[1] = 7;
-  // pm[2] = 2;
-  // pm[3] = 10;
-  // pm[4] = 10000;
-  // pm[6] = 1;
-  // pm[8] = 1;
-  matrix_descr descr;
-  descr.type = SPARSE_MATRIX_TYPE_SYMMETRIC;
-  descr.mode = SPARSE_FILL_MODE_UPPER;
-  descr.diag = SPARSE_DIAG_NON_UNIT;
-  int k0 = 3;
-  int k;
-  double E[3];
-  double X[9];
-  double res;
+  pardiso(pt, &maxfct, &mnum, &mtype, &phase, &n, val, rows_start, col_index,
+          perm, &k, iparm, &msglv1, rhs.data(), sol.data(), &error);
 
-  sparse_status_t error =
-      mkl_sparse_d_gv(&which, pm, Ai, descr, Si, descr, k0, &k, E, X, &res);
 
-  std::cout << "error: " << error << std::endl;
-  std::cout << "number of found eigenvalues: " << k << std::endl;
-  std::cout << "smallest eigenvalue: " << E[0] << " " << E[1] << " " << E[2]
-            << std::endl;
+  
+  mkl_sparse_destroy(Ai);
+  mkl_sparse_destroy(AiCOO);
 
   return 0;
 }
