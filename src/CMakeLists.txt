@@ -1,5 +1,5 @@
 include_directories(/home/pentaery/local/include)
-
+set(CMAKE_BUILD_TYPE Debug)
 find_package(MKL REQUIRED)
 find_package(OpenMP REQUIRED)
 find_package(PkgConfig REQUIRED)

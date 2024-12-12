@@ -12,6 +12,7 @@
 #include <vector>
 
 class System {
+public:
   sparse_matrix_t matA;
   sparse_matrix_t matL;
   std::vector<double> vecRHS;
@@ -67,4 +68,5 @@ public:
   System(MKL_INT size, idx_t nparts);
   System(MKL_INT size, idx_t nparts, int overlap);
   System(MKL_INT size, idx_t nparts, int overlap, int k0);
+  ~System();
 };

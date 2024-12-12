@@ -1,4 +1,5 @@
 #include "mkl_pardiso.h"
+#include "mkl_spblas.h"
 #include "mkl_types.h"
 #include "system.hh"
 
@@ -18,6 +19,7 @@ int main() {
   sys.findNeighbours();
   sys.formAUX();
   sys.formCEM();
+
 
   auto end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> duration = end - start;

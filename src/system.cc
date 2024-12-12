@@ -640,3 +640,9 @@ System::System(MKL_INT size, idx_t nparts, int overlap, int k0) {
   part = new int[nvtxs];
   cStar = 1.0;
 }
+
+System::~System() {
+  delete[] part;
+  mkl_sparse_destroy(matA);
+  mkl_sparse_destroy(matL);
+}
