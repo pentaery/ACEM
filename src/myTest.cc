@@ -2,12 +2,14 @@
 #include "mkl_solvers_ee.h"
 #include "mkl_spblas.h"
 #include "mkl_types.h"
+#include "tqdm.hh"
 #include <chrono>
 #include <fstream>
 #include <iostream>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <vector>
 
 int main() {
@@ -25,42 +27,49 @@ int main() {
   sparse_matrix_t AiCOO;
   mkl_sparse_d_create_coo(&AiCOO, indexing, 3, 3, 5, A_row_index.data(),
                           A_col_index.data(), A_values.data());
-  mkl_sparse_convert_csr(AiCOO, SPARSE_OPERATION_NON_TRANSPOSE, &Ai);
+  // mkl_sparse_convert_csr(AiCOO, SPARSE_OPERATION_NON_TRANSPOSE, &Ai);
 
   int rows, cols;
   int *rows_start, *rows_end, *col_index;
   double *val;
 
-  mkl_sparse_d_export_csr(Ai, &indexing, &rows, &cols, &rows_start, &rows_end,
-                          &col_index, &val);
+  // mkl_sparse_d_export_csr(Ai, &indexing, &rows, &cols, &rows_start, &rows_end,
+  //                         &col_index, &val);
 
-  MKL_INT error;
+  // MKL_INT error;
 
-  MKL_INT maxfct = 1, mnum = 1, mtype = 2, phase = 13;
-  MKL_INT msglv1 = 1;
+  // MKL_INT maxfct = 1, mnum = 1, mtype = 2, phase = 13;
+  // MKL_INT msglv1 = 1;
 
-  MKL_INT idum;
-  MKL_INT perm[64], iparm[64];
-  void *pt[64];
-  for (j = 0; j < 64; j++) {
-    pt[j] = 0;
-  }
-  for (j = 0; j < 64; j++) {
-    iparm[j] = 0;
-  }
-  iparm[34] = 1;
-  iparm[0] = 1;
+  // MKL_INT idum;
+  // MKL_INT perm[64], iparm[64];
+  // void *pt[64];
+  // for (j = 0; j < 64; j++) {
+  //   pt[j] = 0;
+  // }
+  // for (j = 0; j < 64; j++) {
+  //   iparm[j] = 0;
+  // }
+  // iparm[34] = 1;
+  // iparm[0] = 1;
 
-  int n = 3;
-  int k = 1;
+  // int n = 3;
+  // int k = 1;
 
-  pardiso(pt, &maxfct, &mnum, &mtype, &phase, &n, val, rows_start, col_index,
-          perm, &k, iparm, &msglv1, rhs.data(), sol.data(), &error);
+  // pardiso(pt, &maxfct, &mnum, &mtype, &phase, &n, val, rows_start, col_index,
+  //         perm, &k, iparm, &msglv1, rhs.data(), sol.data(), &error);
 
 
   
-  mkl_sparse_destroy(Ai);
+  // mkl_sparse_destroy(Ai);
   mkl_sparse_destroy(AiCOO);
+
+  // std::vector<int> A = {1, 2, 3, 4, 5, 6};
+
+  // for (int a : tq::tqdm(A)) {
+  //   sleep(1);
+  // }
+
 
   return 0;
 }

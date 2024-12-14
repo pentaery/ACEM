@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include "tqdm.hh"
 
 class System {
 public:
@@ -63,6 +64,7 @@ public:
   void formAUX();
   void formCEM();
   void formCEM2();
+  void solveCEM();
   System();
   System(MKL_INT size);
   System(MKL_INT size, idx_t nparts);
