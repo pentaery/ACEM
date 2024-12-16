@@ -603,7 +603,7 @@ void System::formCEM() {
 void ::System::formCEM2() {}
 
 void System::solveCEM() {
-  int i = 0, j = 0, k = 0;
+  int i = 0, j = 0, k = 0, l = 0;
   sparse_matrix_t ACEM;
   sparse_matrix_t ACEMcoo;
   sparse_matrix_t A;
@@ -644,9 +644,18 @@ void System::solveCEM() {
   index2 = 0;
   index3 = 0;
   for (i = 0; i < nparts; ++i) {
-    for (j = 0; j < nparts; ++j) {
-      for (k = 0; k < k0; ++k) {
-        
+    for (j = i; j < nparts; ++j) {
+      std::set<int> intersection;
+      std::set_intersection(overlapping[i].begin(), overlapping[i].end(),
+                            overlapping[j].begin(), overlapping[j].end(),
+                            std::inserter(intersection, intersection.begin()));
+      if (!intersection.empty()) {
+        for (k = 0; k < k0; ++k) {
+          for (l = k; l < k0; ++l) {
+            A_row_index[index1++] = i * nparts * k0 + k;
+            A_col_index[index2++] = j * nparts * k0 + l;
+          }
+        }
       }
     }
   }
