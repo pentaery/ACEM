@@ -651,9 +651,16 @@ void System::solveCEM() {
                             std::inserter(intersection, intersection.begin()));
       if (!intersection.empty()) {
         for (k = 0; k < k0; ++k) {
+          // cblas_dsctr(const int N, const double *X, const int *indx, double
+          // *Y)
+          mkl_sparse_d_mv(const sparse_operation_t operation,
+                          const double alpha, const sparse_matrix_t A,
+                          const struct matrix_descr descr, const double *x,
+                          const double beta, double *y);
           for (l = k; l < k0; ++l) {
-            A_row_index[index1++] = i * nparts * k0 + k;
-            A_col_index[index2++] = j * nparts * k0 + l;
+            A_row_index[index1++] = i * k0 + k;
+            A_col_index[index2++] = j * k0 + l;
+            // cblas_dsctr();
           }
         }
       }
