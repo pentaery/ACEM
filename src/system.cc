@@ -416,6 +416,7 @@ void System::formAUX() {
 }
 
 void System::formCEM() {
+  auto start = std::chrono::high_resolution_clock::now();
   MKL_INT *rows_start, *rows_end, *col_index;
   MKL_INT rows, cols;
   sparse_index_base_t indexing;
@@ -452,8 +453,14 @@ void System::formCEM() {
       }
     }
   }
-
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> duration = end - start;
+  std::cout << "======Finish forming all S_i in " << duration.count()
+            << " ms=======" << std::endl;
   // Calculating CEM Basis in each overlapping area
+  std::cout
+      << "======Start calculating CEM Basis in each overlapping area======"
+      << std::endl;
   // #pragma omp parallel for
   for (int i : tq::trange(nparts)) {
     std::vector<MKL_INT> Ai_col_index(2 * verticesCEM[i].size() *
@@ -600,9 +607,11 @@ void System::formCEM() {
   std::cout << std::endl;
 }
 
-void ::System::formCEM2() {}
+void System::formCEM2() {}
 
 void System::solveCEM() {
+  auto start = std::chrono::high_resolution_clock::now();
+  std::cout << "======Phase IV: Solve the CEM problem======" << std::endl;
   int i = 0, j = 0, k = 0, l = 0;
   sparse_matrix_t ACEM;
   sparse_matrix_t ACEMcoo;
@@ -614,9 +623,9 @@ void System::solveCEM() {
   sparse_index_base_t indexing;
   mkl_sparse_d_export_csr(matL, &indexing, &rows, &cols, &rows_start, &rows_end,
                           &col_index, &val);
-  std::vector<MKL_INT> A_row_index(nvtxs * 7, 0);
-  std::vector<MKL_INT> A_col_index(nvtxs * 7, 0);
-  std::vector<double> A_values(nvtxs * 7, 0);
+  std::vector<MKL_INT> A_row_index(nvtxs * 12, 0);
+  std::vector<MKL_INT> A_col_index(nvtxs * 12, 0);
+  std::vector<double> A_values(nvtxs * 12, 0);
   int index1 = 0, index2 = 0, index3 = 0;
   for (i = 0; i < nvtxs; ++i) {
     for (j = rows_start[i]; j < rows_end[i]; ++j) {
@@ -637,26 +646,34 @@ void System::solveCEM() {
   mkl_sparse_d_create_coo(&Acoo, indexing, nvtxs, nvtxs, A_values.size(),
                           A_row_index.data(), A_col_index.data(),
                           A_values.data());
-  mkl_sparse_convert_csr(Acoo, SPARSE_OPERATION_NON_TRANSPOSE, &matA);
+  mkl_sparse_convert_csr(Acoo, SPARSE_OPERATION_NON_TRANSPOSE, &A);
   mkl_sparse_destroy(Acoo);
 
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> duration = end - start;
+  std::cout<<"======Finish forming the matrix A in " << duration.count() << " ms======" << std::endl;
+  
   index1 = 0;
   index2 = 0;
   index3 = 0;
+  matrix_descr descr;
+  descr.type = SPARSE_MATRIX_TYPE_SYMMETRIC;
+  descr.diag = SPARSE_DIAG_NON_UNIT;
+  descr.mode = SPARSE_FILL_MODE_UPPER;
   for (i = 0; i < nparts; ++i) {
     for (j = i; j < nparts; ++j) {
-      std::set<int> intersection;
+      std::set<idx_t> intersection;
       std::set_intersection(overlapping[i].begin(), overlapping[i].end(),
                             overlapping[j].begin(), overlapping[j].end(),
                             std::inserter(intersection, intersection.begin()));
       if (!intersection.empty()) {
         for (k = 0; k < k0; ++k) {
-          // cblas_dsctr(const int N, const double *X, const int *indx, double
-          // *Y)
-          mkl_sparse_d_mv(const sparse_operation_t operation,
-                          const double alpha, const sparse_matrix_t A,
-                          const struct matrix_descr descr, const double *x,
-                          const double beta, double *y);
+          double *xi;
+          cblas_dsctr(verticesCEM[i].size(),
+                      &cemBasis[i][k * verticesCEM[i].size()],
+                      localtoGlobalCEM[i].data(), xi);
+          mkl_sparse_d_mv(SPARSE_OPERATION_NON_TRANSPOSE, 1.0, A,
+                          descr, xi, 0.0, NULL);
           for (l = k; l < k0; ++l) {
             A_row_index[index1++] = i * k0 + k;
             A_col_index[index2++] = j * k0 + l;
