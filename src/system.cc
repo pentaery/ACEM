@@ -668,12 +668,8 @@ void System::solveCEM() {
                             std::inserter(intersection, intersection.begin()));
       if (!intersection.empty()) {
         for (k = 0; k < k0; ++k) {
-          double *xi;
-          cblas_dsctr(verticesCEM[i].size(),
-                      &cemBasis[i][k * verticesCEM[i].size()],
-                      localtoGlobalCEM[i].data(), xi);
-          mkl_sparse_d_mv(SPARSE_OPERATION_NON_TRANSPOSE, 1.0, A,
-                          descr, xi, 0.0, NULL);
+          
+          
           for (l = k; l < k0; ++l) {
             A_row_index[index1++] = i * k0 + k;
             A_col_index[index2++] = j * k0 + l;
