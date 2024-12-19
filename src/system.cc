@@ -649,8 +649,8 @@ void System::solveCEM() {
   mkl_sparse_convert_csr(Acoo, SPARSE_OPERATION_NON_TRANSPOSE, &A);
   mkl_sparse_destroy(Acoo);
 
-  auto end = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double, std::milli> duration = end - start;
+  auto end1 = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> duration = end1 - start;
   std::cout << "======Finish forming the matrix A in " << duration.count()
             << " ms======" << std::endl;
 
@@ -667,6 +667,8 @@ void System::solveCEM() {
                             overlapping[j].begin(), overlapping[j].end(),
                             std::inserter(intersection, intersection.begin()));
       if (!intersection.empty()) {
+        std::cout << "part " << i << " and part " << j
+                  << " have overlapping area" << std::endl;
         for (k = 0; k < k0; ++k) {
           sparse_matrix_t y;
           int rows_start_y[1] = {0};
@@ -691,16 +693,44 @@ void System::solveCEM() {
             mkl_sparse_sp2m(SPARSE_OPERATION_NON_TRANSPOSE, descr, x,
                             SPARSE_OPERATION_TRANSPOSE, descr, Ay,
                             SPARSE_STAGE_FULL_MULT, &xAy);
-            mkl_sparse_d_export_csr(const sparse_matrix_t source, sparse_index_base_t *indexing, int *rows, int *cols, int **rows_start, int **rows_end, int **col_indx, double **values)
+            MKL_INT *rows_start, *rows_end, *col_index;
+            MKL_INT rows, cols;
+            sparse_index_base_t indexing;
+            mkl_sparse_d_export_csr(xAy, &indexing, &rows, &cols, &rows_start,
+                                    &rows_end, &col_index, &val);
+            A_values[index3++] = val[0];
+            mkl_sparse_destroy(x);
+            mkl_sparse_destroy(xAy);
           }
+          mkl_sparse_destroy(y);
+          mkl_sparse_destroy(Ay);
         }
       }
     }
   }
+  auto end2 = std::chrono::high_resolution_clock::now();
+  duration = end2 - end1;
+  std::cout << "======Finish forming the matrix A(CEM) in " << duration.count()
+            << " ms======" << std::endl;
 
   mkl_sparse_destroy(A);
 
+  A_row_index.resize(index1);
+  A_col_index.resize(index2);
+  A_values.resize(index3);
+  mkl_sparse_d_create_coo(&ACEMcoo, indexing, nparts * k0, nparts * k0, A_values.size(),
+                          A_row_index.data(), A_col_index.data(),
+                          A_values.data());
+  mkl_sparse_convert_csr(ACEMcoo, SPARSE_OPERATION_NON_TRANSPOSE, &ACEM);
+  mkl_sparse_destroy(ACEMcoo);
 
+
+
+
+  
+
+
+  mkl_sparse_destroy(ACEM);
 }
 
 System::System() {
