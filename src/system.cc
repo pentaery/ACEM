@@ -651,15 +651,15 @@ void System::solveCEM() {
 
   auto end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> duration = end - start;
-  std::cout<<"======Finish forming the matrix A in " << duration.count() << " ms======" << std::endl;
-  
+  std::cout << "======Finish forming the matrix A in " << duration.count()
+            << " ms======" << std::endl;
+
   index1 = 0;
   index2 = 0;
   index3 = 0;
   matrix_descr descr;
-  descr.type = SPARSE_MATRIX_TYPE_SYMMETRIC;
+  descr.type = SPARSE_MATRIX_TYPE_GENERAL;
   descr.diag = SPARSE_DIAG_NON_UNIT;
-  descr.mode = SPARSE_FILL_MODE_UPPER;
   for (i = 0; i < nparts; ++i) {
     for (j = i; j < nparts; ++j) {
       std::set<idx_t> intersection;
@@ -668,17 +668,39 @@ void System::solveCEM() {
                             std::inserter(intersection, intersection.begin()));
       if (!intersection.empty()) {
         for (k = 0; k < k0; ++k) {
-          
-          
+          sparse_matrix_t y;
+          int rows_start_y[1] = {0};
+          int rows_end_y[1] = {0};
+          rows_end_y[0] = verticesCEM[i].size();
+          mkl_sparse_d_create_csr(&y, indexing, 1, nvtxs, rows_start_y,
+                                  rows_end_y, localtoGlobalCEM[i].data(),
+                                  &cemBasis[i][k * verticesCEM[i].size()]);
+          sparse_matrix_t Ay;
+          mkl_sparse_spmm(SPARSE_OPERATION_NON_TRANSPOSE, y, A, &Ay);
           for (l = k; l < k0; ++l) {
             A_row_index[index1++] = i * k0 + k;
             A_col_index[index2++] = j * k0 + l;
-            // cblas_dsctr();
+            sparse_matrix_t x;
+            int rows_start_x[1] = {0};
+            int rows_end_x[1] = {0};
+            rows_end_x[0] = verticesCEM[j].size();
+            mkl_sparse_d_create_csr(&x, indexing, 1, nvtxs, rows_start_y,
+                                    rows_end_y, localtoGlobalCEM[j].data(),
+                                    &cemBasis[j][l * verticesCEM[j].size()]);
+            sparse_matrix_t xAy;
+            mkl_sparse_sp2m(SPARSE_OPERATION_NON_TRANSPOSE, descr, x,
+                            SPARSE_OPERATION_TRANSPOSE, descr, Ay,
+                            SPARSE_STAGE_FULL_MULT, &xAy);
+            mkl_sparse_d_export_csr(const sparse_matrix_t source, sparse_index_base_t *indexing, int *rows, int *cols, int **rows_start, int **rows_end, int **col_indx, double **values)
           }
         }
       }
     }
   }
+
+  mkl_sparse_destroy(A);
+
+
 }
 
 System::System() {
