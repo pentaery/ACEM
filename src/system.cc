@@ -660,19 +660,22 @@ void System::solveCEM() {
   matrix_descr descr;
   descr.type = SPARSE_MATRIX_TYPE_GENERAL;
   descr.diag = SPARSE_DIAG_NON_UNIT;
+  int rows_start_y[1] = {0};
+  int rows_end_y[1] = {0};
+  int rows_start_x[1] = {0};
+  int rows_end_x[1] = {0};
   for (i = 0; i < nparts; ++i) {
+    // std::cout << "Processing part " << i << std::endl;
     for (j = i; j < nparts; ++j) {
       std::set<idx_t> intersection;
       std::set_intersection(overlapping[i].begin(), overlapping[i].end(),
                             overlapping[j].begin(), overlapping[j].end(),
                             std::inserter(intersection, intersection.begin()));
       if (!intersection.empty()) {
-        std::cout << "part " << i << " and part " << j
-                  << " have overlapping area" << std::endl;
+        // std::cout << "part " << i << " and part " << j
+        //           << " have overlapping area" << std::endl;
         for (k = 0; k < k0; ++k) {
           sparse_matrix_t y;
-          int rows_start_y[1] = {0};
-          int rows_end_y[1] = {0};
           rows_end_y[0] = verticesCEM[i].size();
           mkl_sparse_d_create_csr(&y, indexing, 1, nvtxs, rows_start_y,
                                   rows_end_y, localtoGlobalCEM[i].data(),
@@ -683,11 +686,9 @@ void System::solveCEM() {
             A_row_index[index1++] = i * k0 + k;
             A_col_index[index2++] = j * k0 + l;
             sparse_matrix_t x;
-            int rows_start_x[1] = {0};
-            int rows_end_x[1] = {0};
             rows_end_x[0] = verticesCEM[j].size();
-            mkl_sparse_d_create_csr(&x, indexing, 1, nvtxs, rows_start_y,
-                                    rows_end_y, localtoGlobalCEM[j].data(),
+            mkl_sparse_d_create_csr(&x, indexing, 1, nvtxs, rows_start_x,
+                                    rows_end_x, localtoGlobalCEM[j].data(),
                                     &cemBasis[j][l * verticesCEM[j].size()]);
             sparse_matrix_t xAy;
             mkl_sparse_sp2m(SPARSE_OPERATION_NON_TRANSPOSE, descr, x,
@@ -699,6 +700,7 @@ void System::solveCEM() {
             mkl_sparse_d_export_csr(xAy, &indexing, &rows, &cols, &rows_start,
                                     &rows_end, &col_index, &val);
             A_values[index3++] = val[0];
+            // std::cout << "val: " << val[0] << std::endl;
             mkl_sparse_destroy(x);
             mkl_sparse_destroy(xAy);
           }
@@ -718,17 +720,11 @@ void System::solveCEM() {
   A_row_index.resize(index1);
   A_col_index.resize(index2);
   A_values.resize(index3);
-  mkl_sparse_d_create_coo(&ACEMcoo, indexing, nparts * k0, nparts * k0, A_values.size(),
-                          A_row_index.data(), A_col_index.data(),
-                          A_values.data());
+  mkl_sparse_d_create_coo(&ACEMcoo, indexing, nparts * k0, nparts * k0,
+                          A_values.size(), A_row_index.data(),
+                          A_col_index.data(), A_values.data());
   mkl_sparse_convert_csr(ACEMcoo, SPARSE_OPERATION_NON_TRANSPOSE, &ACEM);
   mkl_sparse_destroy(ACEMcoo);
-
-
-
-
-  
-
 
   mkl_sparse_destroy(ACEM);
 }
