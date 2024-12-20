@@ -1,4 +1,5 @@
 #include "system.hh"
+#include "mkl_cblas.h"
 #include "mkl_spblas.h"
 #include <cstdio>
 #include <iostream>
@@ -11,11 +12,25 @@ void System::formRHS() {
   double gridLength = 1.0 / (size - 1);
   for (int row = 0; row < size; ++row) {
     for (int col = 0; col < size; ++col) {
-      vecRHS[row * size + col] = 2 * M_PI * M_PI *
-                                 sin(M_PI * (row + 1) * gridLength) *
-                                 sin(M_PI * (col + 1) * gridLength);
+      vecRHS[row * size + col] =
+          2 * M_PI * M_PI * sin(M_PI * (row + 1) * gridLength) *
+          sin(M_PI * (col + 1) * gridLength) * gridLength * gridLength;
     }
   }
+}
+
+void System::testPoisson() {
+  double gridLength = 1.0 / (size - 1);
+  for (int row = 0; row < size; ++row) {
+    for (int col = 0; col < size; ++col) {
+      vecRHS[row * size + col] -= sin(M_PI * (row + 1) * gridLength) *
+                                  sin(M_PI * (col + 1) * gridLength);
+      std::cout << vecRHS[row * size + col] << " ";
+    }
+  }
+  int incx = 1;
+  double norm = cblas_dnrm2(nvtxs, vecRHS.data(), incx);
+  std::cout << "Norm of the RHS: " << norm << std::endl;
 }
 
 void System::getData() {
@@ -171,6 +186,14 @@ void System::solve() {
   if (error != 0) {
     std::cout << "error in pardiso: " << error << std::endl;
   }
+  phase = -1;
+  pardiso(pt, &maxfct, &mnum, &mtype, &phase, &nvtxs, val, rows_start,
+          col_index, perm, &nrhs, iparm, &msglv1, vecRHS.data(), vecSOL.data(),
+          &error);
+  for (i = 0; i < nvtxs; ++i) {
+    std::cout << vecSOL[i] << " ";
+  }
+  std::cout << std::endl << std::endl;
 }
 
 void System::findNeighbours() {
@@ -664,7 +687,7 @@ void System::solveCEM() {
   int rows_end_y[1] = {0};
   int rows_start_x[1] = {0};
   int rows_end_x[1] = {0};
-  for (i = 0; i < nparts; ++i) {
+  for (int i : tq::trange(nparts)) {
     // std::cout << "Processing part " << i << std::endl;
     for (j = i; j < nparts; ++j) {
       std::set<idx_t> intersection;

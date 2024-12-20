@@ -10,16 +10,17 @@
 int main() {
   auto start = std::chrono::high_resolution_clock::now();
 
-  System sys(400, 400, 4, 3);
+  System sys(200, 200, 4, 3);
   sys.getData();
   sys.graphPartition();
-  // sys.formRHS();
-  // sys.formA();
-  // sys.solve();
-  sys.findNeighbours();
-  sys.formAUX();
-  sys.formCEM();
-  sys.solveCEM();
+  sys.formRHS();
+  sys.formA();
+  sys.solve();
+  sys.testPoisson();
+  // sys.findNeighbours();
+  // sys.formAUX();
+  // sys.formCEM();
+  // sys.solveCEM();
 
 
   auto end = std::chrono::high_resolution_clock::now();

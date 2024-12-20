@@ -58,6 +58,7 @@ public:
 public:
   void getData();
   void formRHS();
+  void testPoisson();
   void formA();
   void solve();
   void graphPartition();
