@@ -17,8 +17,10 @@ class System {
 public:
   sparse_matrix_t matA;
   sparse_matrix_t matL;
+  sparse_matrix_t matR; // A flat matrix
   std::vector<double> vecRHS;
   std::vector<double> vecSOL;
+  std::vector<double> cemSOL;
   std::vector<double> matM;
   sparse_index_base_t indexing;
   MKL_INT rows, cols;
@@ -66,6 +68,7 @@ public:
   void formAUX();
   void formCEM();
   void formCEM2();
+  void formMatR();
   void solveCEM();
   System();
   System(MKL_INT size);

@@ -9,7 +9,7 @@
 
 void System::formRHS() {
   vecRHS.resize(nvtxs);
-  double gridLength = 1.0 / (size - 1);
+  double gridLength = 1.0 / (size + 1);
   for (int row = 0; row < size; ++row) {
     for (int col = 0; col < size; ++col) {
       vecRHS[row * size + col] =
@@ -20,17 +20,23 @@ void System::formRHS() {
 }
 
 void System::testPoisson() {
-  double gridLength = 1.0 / (size - 1);
+  double gridLength = 1.0 / (size + 1);
+  int incx = 1;
   for (int row = 0; row < size; ++row) {
     for (int col = 0; col < size; ++col) {
-      vecRHS[row * size + col] -= sin(M_PI * (row + 1) * gridLength) *
-                                  sin(M_PI * (col + 1) * gridLength);
-      std::cout << vecRHS[row * size + col] << " ";
+      vecRHS[row * size + col] = sin(M_PI * (row + 1) * gridLength) *
+                                 sin(M_PI * (col + 1) * gridLength);
     }
   }
-  int incx = 1;
-  double norm = cblas_dnrm2(nvtxs, vecRHS.data(), incx);
-  std::cout << "Norm of the RHS: " << norm << std::endl;
+  double norm1 = cblas_dnrm2(nvtxs, vecRHS.data(), incx);
+  for (int row = 0; row < size; ++row) {
+    for (int col = 0; col < size; ++col) {
+      vecSOL[row * size + col] -= sin(M_PI * (row + 1) * gridLength) *
+                                  sin(M_PI * (col + 1) * gridLength);
+    }
+  }
+  double norm2 = cblas_dnrm2(nvtxs, vecSOL.data(), incx);
+  std::cout << "Norm of the SOL: " << norm2 / norm1 << std::endl;
 }
 
 void System::getData() {
@@ -179,6 +185,7 @@ void System::solve() {
   }
   iparm[34] = 1;
   iparm[0] = 1;
+  iparm[1] = 3;
   vecSOL.resize(nvtxs);
   pardiso(pt, &maxfct, &mnum, &mtype, &phase, &nvtxs, val, rows_start,
           col_index, perm, &nrhs, iparm, &msglv1, vecRHS.data(), vecSOL.data(),
@@ -190,10 +197,6 @@ void System::solve() {
   pardiso(pt, &maxfct, &mnum, &mtype, &phase, &nvtxs, val, rows_start,
           col_index, perm, &nrhs, iparm, &msglv1, vecRHS.data(), vecSOL.data(),
           &error);
-  for (i = 0; i < nvtxs; ++i) {
-    std::cout << vecSOL[i] << " ";
-  }
-  std::cout << std::endl << std::endl;
 }
 
 void System::findNeighbours() {
@@ -632,12 +635,48 @@ void System::formCEM() {
 
 void System::formCEM2() {}
 
+void System::formMatR() {
+  auto start = std::chrono::high_resolution_clock::now();
+  int index1 = 0, index2 = 0, index3 = 0;
+  std::vector<MKL_INT> row_indx;
+  std::vector<MKL_INT> col_indx;
+  std::vector<double> values;
+
+  row_indx.resize(k0 * nparts * nvtxs);
+  col_indx.resize(k0 * nparts * nvtxs);
+  values.resize(k0 * nparts * nvtxs);
+
+  int i = 0, j = 0, k = 0;
+
+  for (i = 0; i < nparts; ++i) {
+    for (j = 0; j < k0; ++j) {
+      for (k = 0; k < verticesCEM[i].size(); ++k) {
+        row_indx[index1++] = i * k0 + j;
+        col_indx[index2++] = localtoGlobalCEM[i][k];
+        values[index3++] = cemBasis[i][j * verticesCEM[i].size() + k];
+      }
+    }
+  }
+  row_indx.resize(index1);
+  col_indx.resize(index2);
+  values.resize(index3);
+
+  sparse_matrix_t matRCOO;
+  mkl_sparse_d_create_coo(&matRCOO, indexing, k0 * nparts, nvtxs, values.size(),
+                          row_indx.data(), col_indx.data(), values.data());
+  mkl_sparse_convert_csr(matRCOO, SPARSE_OPERATION_NON_TRANSPOSE, &matR);
+  mkl_sparse_destroy(matRCOO);
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> duration = end - start;
+  std::cout << "======Finish forming the matrix R in " << duration.count()
+            << " ms======" << std::endl;
+}
+
 void System::solveCEM() {
   auto start = std::chrono::high_resolution_clock::now();
   std::cout << "======Phase IV: Solve the CEM problem======" << std::endl;
   int i = 0, j = 0, k = 0, l = 0;
   sparse_matrix_t ACEM;
-  sparse_matrix_t ACEMcoo;
   sparse_matrix_t A;
   sparse_matrix_t Acoo;
 
@@ -677,79 +716,127 @@ void System::solveCEM() {
   std::cout << "======Finish forming the matrix A in " << duration.count()
             << " ms======" << std::endl;
 
-  index1 = 0;
-  index2 = 0;
-  index3 = 0;
+  sparse_matrix_t RA;
+  mkl_sparse_spmm(SPARSE_OPERATION_NON_TRANSPOSE, matR, A, &RA);
   matrix_descr descr;
   descr.type = SPARSE_MATRIX_TYPE_GENERAL;
   descr.diag = SPARSE_DIAG_NON_UNIT;
-  int rows_start_y[1] = {0};
-  int rows_end_y[1] = {0};
-  int rows_start_x[1] = {0};
-  int rows_end_x[1] = {0};
-  for (int i : tq::trange(nparts)) {
-    // std::cout << "Processing part " << i << std::endl;
-    for (j = i; j < nparts; ++j) {
-      std::set<idx_t> intersection;
-      std::set_intersection(overlapping[i].begin(), overlapping[i].end(),
-                            overlapping[j].begin(), overlapping[j].end(),
-                            std::inserter(intersection, intersection.begin()));
-      if (!intersection.empty()) {
-        // std::cout << "part " << i << " and part " << j
-        //           << " have overlapping area" << std::endl;
-        for (k = 0; k < k0; ++k) {
-          sparse_matrix_t y;
-          rows_end_y[0] = verticesCEM[i].size();
-          mkl_sparse_d_create_csr(&y, indexing, 1, nvtxs, rows_start_y,
-                                  rows_end_y, localtoGlobalCEM[i].data(),
-                                  &cemBasis[i][k * verticesCEM[i].size()]);
-          sparse_matrix_t Ay;
-          mkl_sparse_spmm(SPARSE_OPERATION_NON_TRANSPOSE, y, A, &Ay);
-          for (l = k; l < k0; ++l) {
-            A_row_index[index1++] = i * k0 + k;
-            A_col_index[index2++] = j * k0 + l;
-            sparse_matrix_t x;
-            rows_end_x[0] = verticesCEM[j].size();
-            mkl_sparse_d_create_csr(&x, indexing, 1, nvtxs, rows_start_x,
-                                    rows_end_x, localtoGlobalCEM[j].data(),
-                                    &cemBasis[j][l * verticesCEM[j].size()]);
-            sparse_matrix_t xAy;
-            mkl_sparse_sp2m(SPARSE_OPERATION_NON_TRANSPOSE, descr, x,
-                            SPARSE_OPERATION_TRANSPOSE, descr, Ay,
-                            SPARSE_STAGE_FULL_MULT, &xAy);
-            MKL_INT *rows_start, *rows_end, *col_index;
-            MKL_INT rows, cols;
-            sparse_index_base_t indexing;
-            mkl_sparse_d_export_csr(xAy, &indexing, &rows, &cols, &rows_start,
-                                    &rows_end, &col_index, &val);
-            A_values[index3++] = val[0];
-            // std::cout << "val: " << val[0] << std::endl;
-            mkl_sparse_destroy(x);
-            mkl_sparse_destroy(xAy);
-          }
-          mkl_sparse_destroy(y);
-          mkl_sparse_destroy(Ay);
-        }
-      }
-    }
-  }
+  mkl_sparse_sp2m(SPARSE_OPERATION_NON_TRANSPOSE, descr, RA,
+                  SPARSE_OPERATION_TRANSPOSE, descr, matR,
+                  SPARSE_STAGE_FULL_MULT, &ACEM);
+
+  std::vector<double> cemRHS(nparts * k0, 0.0);
+  mkl_sparse_d_mv(SPARSE_OPERATION_NON_TRANSPOSE, 1.0, matR, descr,
+                  vecRHS.data(), 0.0, cemRHS.data());
+
   auto end2 = std::chrono::high_resolution_clock::now();
   duration = end2 - end1;
-  std::cout << "======Finish forming the matrix A(CEM) in " << duration.count()
-            << " ms======" << std::endl;
+  std::cout << "======Finish forming the matrix A(CEM) and rhs(CEM) in "
+            << duration.count() << " ms======" << std::endl;
 
   mkl_sparse_destroy(A);
 
-  A_row_index.resize(index1);
-  A_col_index.resize(index2);
-  A_values.resize(index3);
-  mkl_sparse_d_create_coo(&ACEMcoo, indexing, nparts * k0, nparts * k0,
-                          A_values.size(), A_row_index.data(),
-                          A_col_index.data(), A_values.data());
-  mkl_sparse_convert_csr(ACEMcoo, SPARSE_OPERATION_NON_TRANSPOSE, &ACEM);
-  mkl_sparse_destroy(ACEMcoo);
+  mkl_sparse_d_export_csr(ACEM, &indexing, &rows, &cols, &rows_start, &rows_end,
+                          &col_index, &val);
+  for(i = 0; i < nparts * k0; ++i) {
+    std::cout << rows_start[i] << " ";
+  }
+  std::cout << "We solve a system with " << rows << " rows and " << cols
+            << " columns" << std::endl;
+  MKL_INT perm[64], iparm[64];
+  void *pt[64];
+  MKL_INT error;
+  MKL_INT maxfct = 1, mnum = 1, mtype = 11, phase = 13;
+  MKL_INT nrhs = 1, msglv1 = 1;
+  for (i = 0; i < 64; i++) {
+    pt[i] = 0;
+  }
+  for (i = 0; i < 64; i++) {
+    iparm[i] = 0;
+  }
+  iparm[34] = 1;
+  iparm[0] = 1;
+  iparm[1] = 3;
+  cemSOL.resize(nparts * k0);
+  int n = nparts * k0;
+  pardiso(pt, &maxfct, &mnum, &mtype, &phase, &n, val, rows_start, col_index,
+          perm, &nrhs, iparm, &msglv1, cemRHS.data(), cemSOL.data(), &error);
+  if (error != 0) {
+    std::cout << "error in pardiso: " << error << std::endl;
+  }
+  phase = -1;
+  pardiso(pt, &maxfct, &mnum, &mtype, &phase, &n, val, rows_start, col_index,
+          perm, &nrhs, iparm, &msglv1, cemRHS.data(), cemSOL.data(), &error);
 
   mkl_sparse_destroy(ACEM);
+
+  // index1 = 0;
+  // index2 = 0;
+  // index3 = 0;
+
+  // int rows_start_y[1] = {0};
+  // int rows_end_y[1] = {0};
+  // int rows_start_x[1] = {0};
+  // int rows_end_x[1] = {0};
+  // for (int i : tq::trange(nparts)) {
+  //   // std::cout << "Processing part " << i << std::endl;
+  //   for (j = i; j < nparts; ++j) {
+  //     std::set<idx_t> intersection;
+  //     std::set_intersection(overlapping[i].begin(), overlapping[i].end(),
+  //                           overlapping[j].begin(), overlapping[j].end(),
+  //                           std::inserter(intersection,
+  //                           intersection.begin()));
+  //     if (!intersection.empty()) {
+  //       // std::cout << "part " << i << " and part " << j
+  //       //           << " have overlapping area" << std::endl;
+  //       for (k = 0; k < k0; ++k) {
+  //         sparse_matrix_t y;
+  //         rows_end_y[0] = verticesCEM[i].size();
+  //         mkl_sparse_d_create_csr(&y, indexing, 1, nvtxs, rows_start_y,
+  //                                 rows_end_y, localtoGlobalCEM[i].data(),
+  //                                 &cemBasis[i][k * verticesCEM[i].size()]);
+  //         sparse_matrix_t Ay;
+  //         mkl_sparse_spmm(SPARSE_OPERATION_NON_TRANSPOSE, y, A, &Ay);
+  //         for (l = k; l < k0; ++l) {
+  //           A_row_index[index1++] = i * k0 + k;
+  //           A_col_index[index2++] = j * k0 + l;
+  //           sparse_matrix_t x;
+  //           rows_end_x[0] = verticesCEM[j].size();
+  //           mkl_sparse_d_create_csr(&x, indexing, 1, nvtxs, rows_start_x,
+  //                                   rows_end_x, localtoGlobalCEM[j].data(),
+  //                                   &cemBasis[j][l * verticesCEM[j].size()]);
+  //           sparse_matrix_t xAy;
+  //           mkl_sparse_sp2m(SPARSE_OPERATION_NON_TRANSPOSE, descr, x,
+  //                           SPARSE_OPERATION_TRANSPOSE, descr, Ay,
+  //                           SPARSE_STAGE_FULL_MULT, &xAy);
+  //           MKL_INT *rows_start, *rows_end, *col_index;
+  //           MKL_INT rows, cols;
+  //           sparse_index_base_t indexing;
+  //           mkl_sparse_d_export_csr(xAy, &indexing, &rows, &cols,
+  //           &rows_start,
+  //                                   &rows_end, &col_index, &val);
+  //           A_values[index3++] = val[0];
+  //           // std::cout << "val: " << val[0] << std::endl;
+  //           mkl_sparse_destroy(x);
+  //           mkl_sparse_destroy(xAy);
+  //         }
+  //         mkl_sparse_destroy(y);
+  //         mkl_sparse_destroy(Ay);
+  //       }
+  //     }
+  //   }
+  // }
+
+  // A_row_index.resize(index1);
+  // A_col_index.resize(index2);
+  // A_values.resize(index3);
+  // mkl_sparse_d_create_coo(&ACEMcoo, indexing, nparts * k0, nparts * k0,
+  //                         A_values.size(), A_row_index.data(),
+  //                         A_col_index.data(), A_values.data());
+  // mkl_sparse_convert_csr(ACEMcoo, SPARSE_OPERATION_NON_TRANSPOSE, &ACEM);
+  // mkl_sparse_destroy(ACEMcoo);
+
+  // mkl_sparse_destroy(ACEM);
 }
 
 System::System() {
@@ -811,4 +898,5 @@ System::~System() {
   delete[] part;
   mkl_sparse_destroy(matA);
   mkl_sparse_destroy(matL);
+  mkl_sparse_destroy(matR);
 }
