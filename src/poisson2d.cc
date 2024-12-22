@@ -10,12 +10,12 @@
 int main() {
   auto start = std::chrono::high_resolution_clock::now();
 
-  System sys(100, 30, 1, 1);
+  System sys(100, 100, 4, 5);
   sys.getData();
   sys.graphPartition();
-  // sys.formRHS();
-  // sys.formA();
-  // sys.solve();
+  sys.formRHS();
+  sys.formA();
+  sys.solve();
   // sys.testPoisson();
   sys.findNeighbours();
   sys.formAUX();

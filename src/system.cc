@@ -724,6 +724,7 @@ void System::solveCEM() {
   mkl_sparse_sp2m(SPARSE_OPERATION_NON_TRANSPOSE, descr, RA,
                   SPARSE_OPERATION_TRANSPOSE, descr, matR,
                   SPARSE_STAGE_FULL_MULT, &ACEM);
+  mkl_sparse_order(ACEM); // Important
 
   std::vector<double> cemRHS(nparts * k0, 0.0);
   mkl_sparse_d_mv(SPARSE_OPERATION_NON_TRANSPOSE, 1.0, matR, descr,
@@ -735,12 +736,13 @@ void System::solveCEM() {
             << duration.count() << " ms======" << std::endl;
 
   mkl_sparse_destroy(A);
+  mkl_sparse_destroy(RA);
 
-  mkl_sparse_d_export_csr(ACEM, &indexing, &rows, &cols, &rows_start, &rows_end,
-                          &col_index, &val);
-  for(i = 0; i < nparts * k0; ++i) {
-    std::cout << rows_start[i] << " ";
-  }
+  MKL_INT *rows_start_new, *rows_end_new, *col_index_new;
+  double *val_new;
+  mkl_sparse_d_export_csr(ACEM, &indexing, &rows, &cols, &rows_start_new,
+                          &rows_end_new, &col_index_new, &val_new);
+
   std::cout << "We solve a system with " << rows << " rows and " << cols
             << " columns" << std::endl;
   MKL_INT perm[64], iparm[64];
@@ -757,10 +759,12 @@ void System::solveCEM() {
   iparm[34] = 1;
   iparm[0] = 1;
   iparm[1] = 3;
+  iparm[26] = 1;
   cemSOL.resize(nparts * k0);
   int n = nparts * k0;
-  pardiso(pt, &maxfct, &mnum, &mtype, &phase, &n, val, rows_start, col_index,
-          perm, &nrhs, iparm, &msglv1, cemRHS.data(), cemSOL.data(), &error);
+  pardiso(pt, &maxfct, &mnum, &mtype, &phase, &n, val_new, rows_start_new,
+          col_index_new, perm, &nrhs, iparm, &msglv1, cemRHS.data(),
+          cemSOL.data(), &error);
   if (error != 0) {
     std::cout << "error in pardiso: " << error << std::endl;
   }
@@ -769,6 +773,14 @@ void System::solveCEM() {
           perm, &nrhs, iparm, &msglv1, cemRHS.data(), cemSOL.data(), &error);
 
   mkl_sparse_destroy(ACEM);
+
+  int incx = 1;
+  double normDirect = cblas_dnrm2(nvtxs, vecSOL.data(), incx);
+  mkl_sparse_d_mv(SPARSE_OPERATION_TRANSPOSE, 1.0, matR, descr,
+                  cemSOL.data(), -1.0, vecSOL.data());
+  double normResidual = cblas_dnrm2(nvtxs, vecSOL.data(), incx);
+  std::cout << "The relative residual is: " << normResidual / normDirect
+            << std::endl;
 
   // index1 = 0;
   // index2 = 0;
@@ -846,7 +858,7 @@ System::System() {
   nparts = 10;
   part = new int[nvtxs];
   overlap = 2;
-  cStar = 1.0;
+  cStar = 1.0 * size * size;
   k0 = 3;
 }
 
@@ -857,7 +869,7 @@ System::System(MKL_INT size) {
   nparts = 10;
   part = new int[nvtxs];
   overlap = 2;
-  cStar = 1.0;
+  cStar = 1.0 * size * size;
   k0 = 3;
 }
 
@@ -868,7 +880,7 @@ System::System(MKL_INT size, idx_t nparts) {
   nvtxs = size * size;
   part = new int[nvtxs];
   overlap = 2;
-  cStar = 1.0;
+  cStar = 1.0 * size * size;
   k0 = 3;
 }
 
@@ -879,7 +891,7 @@ System::System(MKL_INT size, idx_t nparts, int overlap) {
   indexing = SPARSE_INDEX_BASE_ZERO;
   nvtxs = size * size;
   part = new int[nvtxs];
-  cStar = 1.0;
+  cStar = 1.0 * size * size;
   k0 = 3;
 }
 
@@ -891,7 +903,7 @@ System::System(MKL_INT size, idx_t nparts, int overlap, int k0) {
   indexing = SPARSE_INDEX_BASE_ZERO;
   nvtxs = size * size;
   part = new int[nvtxs];
-  cStar = 1.0;
+  cStar = 1.0 * size * size;
 }
 
 System::~System() {
