@@ -532,6 +532,10 @@ void System::formCEM() {
             Ai_values[index3++] = -val[j];
             // std::cout << " " << val[j];
           }
+        } else {
+          Ai_row_index[index1++] = (globalTolocalCEM[i][element]);
+          Ai_col_index[index2++] = (globalTolocalCEM[i][element]);
+          Ai_values[index3++] = val[j];
         }
       }
       // std::cout << std::endl;
