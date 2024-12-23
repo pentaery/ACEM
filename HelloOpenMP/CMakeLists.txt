@@ -1,5 +1,5 @@
 find_package(OpenMP REQUIRED)
-add_executable(test looplevel.c timer.c)
+add_executable(test HelloOpenMP.c)
 if(OpenMP_CXX_FOUND)
     message("======${OpenMP_CXX_FLAGS}======")
     message("======${OpenMP_CXX_LIBRARIES}======")
