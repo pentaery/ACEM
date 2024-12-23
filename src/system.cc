@@ -82,7 +82,7 @@ void System::getData() {
       }
     }
   }
-  std::cout << "non-zero elements in L: " << values.size() << std::endl;
+  std::cout << "non-zero elements in L and U: " << values.size() << std::endl;
   // int i;
   // for (i = 0; i < values.size(); ++i) {
   //   std::cout << row_indx[i] << " " << col_indx[i] << " " << values[i]
@@ -167,6 +167,7 @@ void System::formA() {
 }
 
 void System::solve() {
+  auto start = std::chrono::high_resolution_clock::now();
   MKL_INT *rows_start, *rows_end, *col_index;
   mkl_sparse_d_export_csr(matA, &indexing, &rows, &cols, &rows_start, &rows_end,
                           &col_index, &val);
@@ -175,7 +176,7 @@ void System::solve() {
   void *pt[64];
   MKL_INT error;
   MKL_INT maxfct = 1, mnum = 1, mtype = 2, phase = 13;
-  MKL_INT nrhs = 1, msglv1 = 1;
+  MKL_INT nrhs = 1, msglv1 = 0;
   int i;
   for (i = 0; i < 64; i++) {
     pt[i] = 0;
@@ -197,6 +198,10 @@ void System::solve() {
   pardiso(pt, &maxfct, &mnum, &mtype, &phase, &nvtxs, val, rows_start,
           col_index, perm, &nrhs, iparm, &msglv1, vecRHS.data(), vecSOL.data(),
           &error);
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> duration = end - start;
+  std::cout << "======Phase 0: Direct solve with " << duration.count()
+            << " ms======" << std::endl;
 }
 
 void System::findNeighbours() {
@@ -743,7 +748,7 @@ void System::solveCEM() {
   mkl_sparse_d_export_csr(ACEM, &indexing, &rows, &cols, &rows_start_new,
                           &rows_end_new, &col_index_new, &val_new);
 
-  std::cout << "We solve a system with " << rows << " rows and " << cols
+  std::cout << "======In CEM we solve a system with " << rows << " rows and " << cols
             << " columns" << std::endl;
   MKL_INT perm[64], iparm[64];
   void *pt[64];
