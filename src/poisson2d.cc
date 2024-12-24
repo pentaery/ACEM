@@ -10,7 +10,7 @@
 int main() {
   auto start = std::chrono::high_resolution_clock::now();
 
-  System sys(600, 600, 4, 4);
+  System sys(100, 100, 4, 10);
   sys.getData();
 
   sys.formRHS();
