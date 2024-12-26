@@ -381,7 +381,7 @@ void System::formAUX() {
   descr.diag = SPARSE_DIAG_NON_UNIT;
   descr.mode = SPARSE_FILL_MODE_UPPER;
 
-#pragma omp parallel for
+  // #pragma omp parallel for
   for (i = 0; i < nparts; ++i) {
     //   for (j = 0; j < Ai_values[i].size(); ++j) {
     //     std::cout<< Ai_col_index[i][j] << "  ";
@@ -416,6 +416,8 @@ void System::formAUX() {
                             Si_values[i].size(), Si_row_index[i].data(),
                             Si_col_index[i].data(), Si_values[i].data());
 
+
+
     mkl_sparse_convert_csr(AiCOO[i], SPARSE_OPERATION_NON_TRANSPOSE, &Ai[i]);
     mkl_sparse_convert_csr(SiCOO[i], SPARSE_OPERATION_NON_TRANSPOSE, &Si[i]);
 
@@ -432,8 +434,8 @@ void System::formAUX() {
       std::cout << "===========Not find enough eigenvalues==========="
                 << std::endl;
     }
-    // std::cout << "part: " << i << " residual: " << res[i]
-    //           << " Smallest eigenvalue: " << eigenvalue[i][0] << std::endl;
+    std::cout << "part: " << i << " residual: " << res[i]
+              << " Smallest eigenvalue: " << eigenvalue[i][0] << std::endl;
 
     mkl_sparse_destroy(Ai[i]);
     mkl_sparse_destroy(Si[i]);
@@ -752,8 +754,8 @@ void System::solveCEM() {
   mkl_sparse_d_export_csr(ACEM, &indexing, &rows, &cols, &rows_start_new,
                           &rows_end_new, &col_index_new, &val_new);
 
-  std::cout << "======In CEM we solve a system with " << rows << " rows and " << cols
-            << " columns" << std::endl;
+  std::cout << "======In CEM we solve a system with " << rows << " rows and "
+            << cols << " columns" << std::endl;
   MKL_INT perm[64], iparm[64];
   void *pt[64];
   MKL_INT error;
@@ -785,8 +787,8 @@ void System::solveCEM() {
 
   int incx = 1;
   double normDirect = cblas_dnrm2(nvtxs, vecSOL.data(), incx);
-  mkl_sparse_d_mv(SPARSE_OPERATION_TRANSPOSE, 1.0, matR, descr,
-                  cemSOL.data(), -1.0, vecSOL.data());
+  mkl_sparse_d_mv(SPARSE_OPERATION_TRANSPOSE, 1.0, matR, descr, cemSOL.data(),
+                  -1.0, vecSOL.data());
   double normResidual = cblas_dnrm2(nvtxs, vecSOL.data(), incx);
   std::cout << "The relative residual is: " << normResidual / normDirect
             << std::endl;
