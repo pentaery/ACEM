@@ -39,7 +39,7 @@ void System::testPoisson() {
   std::cout << "Norm of the SOL: " << norm2 / norm1 << std::endl;
 }
 
-void System::getData() {
+void System::getDataPoisson2d() {
   std::vector<MKL_INT> row_indx;
   std::vector<MKL_INT> col_indx;
   std::vector<double> values;
@@ -82,6 +82,51 @@ void System::getData() {
       }
     }
   }
+  std::cout << "non-zero elements in L and U: " << values.size() << std::endl;
+  // int i;
+  // for (i = 0; i < values.size(); ++i) {
+  //   std::cout << row_indx[i] << " " << col_indx[i] << " " << values[i]
+  //             << std::endl;
+  // }
+  sparse_matrix_t matB;
+  mkl_sparse_d_create_coo(&matB, indexing, nvtxs, nvtxs, values.size(),
+                          row_indx.data(), col_indx.data(), values.data());
+  mkl_sparse_convert_csr(matB, SPARSE_OPERATION_NON_TRANSPOSE, &matL);
+  mkl_sparse_destroy(matB);
+}
+
+void System::getData() {
+  std::vector<MKL_INT> row_indx;
+  std::vector<MKL_INT> col_indx;
+  std::vector<double> values;
+
+
+
+  std::string filename = "../../i.txt";
+  std::ifstream infile(filename);
+  int index;
+  double number;
+  while (infile >> index) {
+    row_indx.push_back(index);
+  }
+  infile.close();
+
+  filename = "../../j.txt";
+  infile.open(filename);
+  while (infile >> index) {
+    col_indx.push_back(index);
+  }
+  infile.close();
+
+  filename = "../../v.txt";
+  infile.open(filename);
+  while (infile >> number) {
+    values.push_back(number);
+  }
+  infile.close();
+  
+
+
   std::cout << "non-zero elements in L and U: " << values.size() << std::endl;
   // int i;
   // for (i = 0; i < values.size(); ++i) {

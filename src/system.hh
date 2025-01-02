@@ -1,17 +1,18 @@
 #include "mkl.h"
 #include "mkl_spblas.h"
 #include "mkl_types.h"
+#include "tqdm.hh"
+#include <algorithm>
 #include <bits/types/clock_t.h>
 #include <chrono>
 #include <cmath>
+#include <fstream>
 #include <map>
 #include <metis.h>
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-#include <algorithm>
-#include "tqdm.hh"
 
 class System {
 public:
@@ -58,6 +59,7 @@ public:
   int k0;
 
 public:
+  void getDataPoisson2d();
   void getData();
   void formRHS();
   void testPoisson();
