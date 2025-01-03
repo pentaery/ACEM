@@ -7,7 +7,7 @@
 #include <ostream>
 #include <vector>
 
-void System::formRHS() {
+void System::formRHSPoisson2d() {
   vecRHS.resize(nvtxs);
   double gridLength = 1.0 / (size + 1);
   for (int row = 0; row < size; ++row) {
@@ -16,6 +16,13 @@ void System::formRHS() {
           2 * M_PI * M_PI * sin(M_PI * (row + 1) * gridLength) *
           sin(M_PI * (col + 1) * gridLength) * gridLength * gridLength;
     }
+  }
+}
+
+void System::formRHS() {
+  vecRHS.resize(nvtxs);
+  for (int i = 0; i < nvtxs; ++i) {
+    vecRHS[i] = 1.0;
   }
 }
 
@@ -111,6 +118,8 @@ void System::getData() {
   }
   infile.close();
 
+
+
   filename = "../../j.txt";
   infile.open(filename);
   while (infile >> index) {
@@ -124,8 +133,26 @@ void System::getData() {
     values.push_back(number);
   }
   infile.close();
-  
 
+  // int i = 0;
+
+  // for (i = 0; i < row_indx.size(); ++i) {
+  //   std::cout << row_indx[i] << " ";
+  // }
+
+  // std::cout << std::endl;
+
+  // for (i = 0; i < col_indx.size(); ++i) {
+  //   std::cout << col_indx[i] << " ";
+  // }
+
+  // std::cout << std::endl;
+
+  // for (i = 0; i < values.size(); ++i) {
+  //   std::cout << values[i] << " ";
+  // }
+
+  // std::cout << std::endl;
 
   std::cout << "non-zero elements in L and U: " << values.size() << std::endl;
   // int i;
@@ -146,7 +173,7 @@ void System::graphPartition() {
   MKL_INT *rows_start, *rows_end, *col_index;
   mkl_sparse_d_export_csr(matL, &indexing, &rows, &cols, &rows_start, &rows_end,
                           &col_index, &val);
-  rows_start[size * size] = rows_end[size * size - 1];
+
 
   idx_t ncon = 1;
   idx_t objval;
@@ -179,6 +206,11 @@ void System::formA() {
   sparse_index_base_t indexing;
   mkl_sparse_d_export_csr(matL, &indexing, &rows, &cols, &rows_start, &rows_end,
                           &col_index, &val);
+  for (int i = 0; i < 484; ++i) {
+    std::cout << rows_start[i] << " ";
+  }
+  std::cout << std::endl;
+
   std::vector<MKL_INT> A_row_index;
   std::vector<MKL_INT> A_col_index;
   std::vector<double> A_values;

@@ -61,6 +61,7 @@ public:
 public:
   void getDataPoisson2d();
   void getData();
+  void formRHSPoisson2d();
   void formRHS();
   void testPoisson();
   void formA();
