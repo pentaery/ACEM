@@ -109,57 +109,30 @@ void System::getData() {
 
 
 
-  std::string filename = "../../i.txt";
+  std::string filename = "../../data/i.txt";
   std::ifstream infile(filename);
   int index;
   double number;
   while (infile >> index) {
-    row_indx.push_back(index);
+    row_indx.push_back(index - 1);
   }
   infile.close();
 
-
-
-  filename = "../../j.txt";
+  filename = "../../data/j.txt";
   infile.open(filename);
   while (infile >> index) {
-    col_indx.push_back(index);
+    col_indx.push_back(index - 1);
   }
   infile.close();
 
-  filename = "../../v.txt";
+  filename = "../../data/v.txt";
   infile.open(filename);
   while (infile >> number) {
     values.push_back(number);
   }
   infile.close();
 
-  // int i = 0;
-
-  // for (i = 0; i < row_indx.size(); ++i) {
-  //   std::cout << row_indx[i] << " ";
-  // }
-
-  // std::cout << std::endl;
-
-  // for (i = 0; i < col_indx.size(); ++i) {
-  //   std::cout << col_indx[i] << " ";
-  // }
-
-  // std::cout << std::endl;
-
-  // for (i = 0; i < values.size(); ++i) {
-  //   std::cout << values[i] << " ";
-  // }
-
-  // std::cout << std::endl;
-
-  std::cout << "non-zero elements in L and U: " << values.size() << std::endl;
-  // int i;
-  // for (i = 0; i < values.size(); ++i) {
-  //   std::cout << row_indx[i] << " " << col_indx[i] << " " << values[i]
-  //             << std::endl;
-  // }
+  std::cout << "The size of the input matrix is " << nvtxs << " and we have "<< values.size() << " non-zero elements in L and U"<< std::endl;
   sparse_matrix_t matB;
   mkl_sparse_d_create_coo(&matB, indexing, nvtxs, nvtxs, values.size(),
                           row_indx.data(), col_indx.data(), values.data());
@@ -205,12 +178,9 @@ void System::formA() {
   MKL_INT rows, cols;
   sparse_index_base_t indexing;
   mkl_sparse_d_export_csr(matL, &indexing, &rows, &cols, &rows_start, &rows_end,
-                          &col_index, &val);
-  for (int i = 0; i < 484; ++i) {
-    std::cout << rows_start[i] << " ";
-  }
-  std::cout << std::endl;
+                        &col_index, &val);
 
+  
   std::vector<MKL_INT> A_row_index;
   std::vector<MKL_INT> A_col_index;
   std::vector<double> A_values;

@@ -10,19 +10,19 @@
 int main() {
   auto start = std::chrono::high_resolution_clock::now();
 
-  System sys(22, 10, 1, 1);
+  System sys(20, 10, 2, 3);
   sys.getData();
 
   sys.formRHS();
   sys.formA();
   sys.solve();
   sys.graphPartition();
-  // // sys.testPoisson();
-  // sys.findNeighbours();
-  // sys.formAUX();
-  // sys.formCEM();
-  // sys.formMatR();
-  // sys.solveCEM();
+  // sys.testPoisson();
+  sys.findNeighbours();
+  sys.formAUX();
+  sys.formCEM();
+  sys.formMatR();
+  sys.solveCEM();
 
   auto end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> duration = end - start;
