@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <iostream>
 
+#include <math.h>
 #include <ostream>
 #include <vector>
 
@@ -21,9 +22,17 @@ void System::formRHSPoisson2d() {
 
 void System::formRHS() {
   vecRHS.resize(nvtxs);
-  for (int i = 0; i < nvtxs; ++i) {
-    vecRHS[i] = 1.0;
+  int i = 0;
+  // for (int i = 0; i < nvtxs; ++i) {
+  //   vecRHS[i] = 1.0;
+  // }
+  std::string filename = "../../data/b.txt";
+  std::ifstream infile(filename);
+  double number;
+  while (infile >> number) {
+    vecRHS[i++] = number;
   }
+  infile.close();
 }
 
 void System::testPoisson() {
@@ -107,8 +116,6 @@ void System::getData() {
   std::vector<MKL_INT> col_indx;
   std::vector<double> values;
 
-
-
   std::string filename = "../../data/i.txt";
   std::ifstream infile(filename);
   int index;
@@ -132,7 +139,8 @@ void System::getData() {
   }
   infile.close();
 
-  std::cout << "The size of the input matrix is " << nvtxs << " and we have "<< values.size() << " non-zero elements in L and U"<< std::endl;
+  std::cout << "The size of the input matrix is " << nvtxs << " and we have "
+            << values.size() << " non-zero elements in L and U" << std::endl;
   sparse_matrix_t matB;
   mkl_sparse_d_create_coo(&matB, indexing, nvtxs, nvtxs, values.size(),
                           row_indx.data(), col_indx.data(), values.data());
@@ -146,7 +154,6 @@ void System::graphPartition() {
   MKL_INT *rows_start, *rows_end, *col_index;
   mkl_sparse_d_export_csr(matL, &indexing, &rows, &cols, &rows_start, &rows_end,
                           &col_index, &val);
-
 
   idx_t ncon = 1;
   idx_t objval;
@@ -178,9 +185,8 @@ void System::formA() {
   MKL_INT rows, cols;
   sparse_index_base_t indexing;
   mkl_sparse_d_export_csr(matL, &indexing, &rows, &cols, &rows_start, &rows_end,
-                        &col_index, &val);
+                          &col_index, &val);
 
-  
   std::vector<MKL_INT> A_row_index;
   std::vector<MKL_INT> A_col_index;
   std::vector<double> A_values;
@@ -462,8 +468,6 @@ void System::formAUX() {
     mkl_sparse_d_create_coo(&SiCOO[i], indexing, count[i], count[i],
                             Si_values[i].size(), Si_row_index[i].data(),
                             Si_col_index[i].data(), Si_values[i].data());
-
-
 
     mkl_sparse_convert_csr(AiCOO[i], SPARSE_OPERATION_NON_TRANSPOSE, &Ai[i]);
     mkl_sparse_convert_csr(SiCOO[i], SPARSE_OPERATION_NON_TRANSPOSE, &Si[i]);
@@ -793,7 +797,6 @@ void System::solveCEM() {
   std::cout << "======Finish forming the matrix A(CEM) and rhs(CEM) in "
             << duration.count() << " ms======" << std::endl;
 
-  mkl_sparse_destroy(A);
   mkl_sparse_destroy(RA);
 
   MKL_INT *rows_start_new, *rows_end_new, *col_index_new;
@@ -833,12 +836,36 @@ void System::solveCEM() {
   mkl_sparse_destroy(ACEM);
 
   int incx = 1;
-  double normDirect = cblas_dnrm2(nvtxs, vecSOL.data(), incx);
+  std::vector<double> vecCEM(nvtxs, 0.0);
+  std::vector<double> Ax1(nvtxs, 0.0);
+  std::vector<double> Ax2(nvtxs, 0.0);
+  // std::copy(vecSOL.begin(), vecSOL.end(), vecCopy.begin());
+
+  mkl_sparse_d_mv(SPARSE_OPERATION_TRANSPOSE, 1.0, matR, descr, cemSOL.data(),
+                  0.0, vecCEM.data());
+  mkl_sparse_d_mv(SPARSE_OPERATION_TRANSPOSE, 1.0, A, descr, vecCEM.data(), 0.0,
+                  Ax1.data());
+  double normEnergyDirect =
+      cblas_ddot(nvtxs, Ax1.data(), incx, vecCEM.data(), incx);
+  
+
+  cblas_daxpy(nvtxs, -1.0, vecSOL.data(), incx, vecCEM.data(), incx);
+  mkl_sparse_d_mv(SPARSE_OPERATION_TRANSPOSE, 1.0, A, descr, vecCEM.data(), 0.0,
+                  Ax2.data());
+  double normEnergyResidual =
+      cblas_ddot(nvtxs, Ax2.data(), incx, vecCEM.data(), incx);
+  std::cout << "Energy residual is: "
+            << sqrt(normEnergyResidual) / sqrt(normEnergyDirect) << std::endl;
+
+  
+
+  double normL2Direct = cblas_dnrm2(nvtxs, vecSOL.data(), incx);
   mkl_sparse_d_mv(SPARSE_OPERATION_TRANSPOSE, 1.0, matR, descr, cemSOL.data(),
                   -1.0, vecSOL.data());
-  double normResidual = cblas_dnrm2(nvtxs, vecSOL.data(), incx);
-  std::cout << "The relative residual is: " << normResidual / normDirect
-            << std::endl;
+  double normL2Residual = cblas_dnrm2(nvtxs, vecSOL.data(), incx);
+  std::cout << "L2 residual is: " << normL2Residual / normL2Direct << std::endl;
+
+  mkl_sparse_destroy(A);
 
   // index1 = 0;
   // index2 = 0;
@@ -962,6 +989,17 @@ System::System(MKL_INT size, idx_t nparts, int overlap, int k0) {
   nvtxs = size * size;
   part = new int[nvtxs];
   cStar = 1.0 * size * size;
+}
+
+System::System(MKL_INT size, MKL_INT nvtxs, idx_t nparts, int overlap, int k0) {
+  this->k0 = k0;
+  this->overlap = overlap;
+  this->size = size;
+  this->nparts = nparts;
+  indexing = SPARSE_INDEX_BASE_ZERO;
+  this->nvtxs = nvtxs;
+  part = new int[nvtxs];
+  cStar = 1.0 * nvtxs;
 }
 
 System::~System() {

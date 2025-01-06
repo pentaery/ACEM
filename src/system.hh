@@ -78,5 +78,6 @@ public:
   System(MKL_INT size, idx_t nparts);
   System(MKL_INT size, idx_t nparts, int overlap);
   System(MKL_INT size, idx_t nparts, int overlap, int k0);
+  System(MKL_INT size, MKL_INT nvtxs, idx_t nparts, int overlap, int k0);
   ~System();
 };
