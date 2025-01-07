@@ -453,7 +453,7 @@ void System::formAUX() {
   descr.diag = SPARSE_DIAG_NON_UNIT;
   descr.mode = SPARSE_FILL_MODE_UPPER;
 
-  // #pragma omp parallel for
+#pragma omp parallel for
   for (i = 0; i < nparts; ++i) {
     //   for (j = 0; j < Ai_values[i].size(); ++j) {
     //     std::cout<< Ai_col_index[i][j] << "  ";
@@ -564,20 +564,31 @@ void System::formCEM() {
   std::cout
       << "======Start calculating CEM Basis in each overlapping area======"
       << std::endl;
-  // #pragma omp parallel for
-  for (int i : tq::trange(nparts)) {
-    std::vector<MKL_INT> Ai_col_index(2 * verticesCEM[i].size() *
-                                          verticesCEM[i].size() /
-                                          overlapping[i].size(),
-                                      0);
-    std::vector<MKL_INT> Ai_row_index(2 * verticesCEM[i].size() *
-                                          verticesCEM[i].size() /
-                                          overlapping[i].size(),
-                                      0);
-    std::vector<double> Ai_values(2 * verticesCEM[i].size() *
-                                      verticesCEM[i].size() /
-                                      overlapping[i].size(),
-                                  0);
+
+  std::vector<std::vector<MKL_INT>> Ai_col_index;
+  std::vector<std::vector<MKL_INT>> Ai_row_index;
+  std::vector<std::vector<double>> Ai_values;
+  std::vector<std::vector<double>> rhs;
+  std::vector<sparse_matrix_t> AiCOO;
+  std::vector<sparse_matrix_t> Ai;
+
+  Ai_col_index.resize(nparts);
+  Ai_row_index.resize(nparts);
+  Ai_values.resize(nparts);
+  rhs.resize(nparts);
+  AiCOO.resize(nparts);
+  Ai.resize(nparts);
+
+
+#pragma omp parallel for
+  for (i = 0; i < nparts; ++i) {
+    Ai_col_index[i].resize(2 * verticesCEM[i].size() * verticesCEM[i].size() /
+                           overlapping[i].size());
+    Ai_row_index[i].resize(2 * verticesCEM[i].size() * verticesCEM[i].size() /
+                           overlapping[i].size());
+    Ai_values[i].resize(2 * verticesCEM[i].size() * verticesCEM[i].size() /
+                        overlapping[i].size());
+    
     int index1 = 0;
     int index2 = 0;
     int index3 = 0;
@@ -591,23 +602,23 @@ void System::formCEM() {
           // std::cout << " element :" << col_index[j];
           if (globalTolocalCEM[i][col_index[j]] <=
               globalTolocalCEM[i][element]) {
-            Ai_row_index[index1++] = (globalTolocalCEM[i][element]);
-            Ai_col_index[index2++] = (globalTolocalCEM[i][element]);
-            Ai_values[index3++] = val[j];
+            Ai_row_index[i][index1++] = (globalTolocalCEM[i][element]);
+            Ai_col_index[i][index2++] = (globalTolocalCEM[i][element]);
+            Ai_values[i][index3++] = val[j];
             // std::cout << " " << val[j];
           } else {
-            Ai_row_index[index1++] = (globalTolocalCEM[i][element]);
-            Ai_col_index[index2++] = (globalTolocalCEM[i][element]);
-            Ai_values[index3++] = val[j];
-            Ai_row_index[index1++] = (globalTolocalCEM[i][element]);
-            Ai_col_index[index2++] = (globalTolocalCEM[i][col_index[j]]);
-            Ai_values[index3++] = -val[j];
+            Ai_row_index[i][index1++] = (globalTolocalCEM[i][element]);
+            Ai_col_index[i][index2++] = (globalTolocalCEM[i][element]);
+            Ai_values[i][index3++] = val[j];
+            Ai_row_index[i][index1++] = (globalTolocalCEM[i][element]);
+            Ai_col_index[i][index2++] = (globalTolocalCEM[i][col_index[j]]);
+            Ai_values[i][index3++] = -val[j];
             // std::cout << " " << val[j];
           }
         } else {
-          Ai_row_index[index1++] = (globalTolocalCEM[i][element]);
-          Ai_col_index[index2++] = (globalTolocalCEM[i][element]);
-          Ai_values[index3++] = val[j];
+          Ai_row_index[i][index1++] = (globalTolocalCEM[i][element]);
+          Ai_col_index[i][index2++] = (globalTolocalCEM[i][element]);
+          Ai_values[i][index3++] = val[j];
         }
       }
       // std::cout << std::endl;
@@ -618,9 +629,9 @@ void System::formCEM() {
       for (const auto &element1 : vertices[element]) {
         for (const auto &element2 : vertices[element]) {
           if (globalTolocalCEM[i][element1] <= globalTolocalCEM[i][element2]) {
-            Ai_row_index[index1++] = globalTolocalCEM[i][element1];
-            Ai_col_index[index2++] = globalTolocalCEM[i][element2];
-            Ai_values[index3++] =
+            Ai_row_index[i][index1++] = globalTolocalCEM[i][element1];
+            Ai_col_index[i][index2++] = globalTolocalCEM[i][element2];
+            Ai_values[i][index3++] =
                 sMatrix[element]
                        [globalTolocal[element1] * vertices[element].size() +
                         globalTolocal[element2]];
@@ -629,32 +640,30 @@ void System::formCEM() {
       }
     }
 
-    Ai_row_index.resize(index1);
-    Ai_col_index.resize(index2);
-    Ai_values.resize(index3);
+    Ai_row_index[i].resize(index1);
+    Ai_col_index[i].resize(index2);
+    Ai_values[i].resize(index3);
 
-    std::vector<double> rhs(verticesCEM[i].size() * k0, 0.0);
+    rhs[i].resize(verticesCEM[i].size() * k0);
     for (j = 0; j < k0; ++j) {
       for (const auto &element : vertices[i]) {
-        rhs[j * verticesCEM[i].size() + globalTolocalCEM[i][element]] =
+        rhs[i][j * verticesCEM[i].size() + globalTolocalCEM[i][element]] =
             sData[globalTolocalCEM[i][element]] *
             eigenvector[i][j * vertices[i].size() + globalTolocal[element]];
       }
     }
 
-    sparse_matrix_t AiCOO;
-    sparse_matrix_t Ai;
     // std::cout << "vertices size: " << verticesCEM[i].size() << std::endl;
-    mkl_sparse_d_create_coo(&AiCOO, indexing, verticesCEM[i].size(),
-                            verticesCEM[i].size(), Ai_values.size(),
-                            Ai_row_index.data(), Ai_col_index.data(),
-                            Ai_values.data());
-    mkl_sparse_convert_csr(AiCOO, SPARSE_OPERATION_NON_TRANSPOSE, &Ai);
+    mkl_sparse_d_create_coo(&AiCOO[i], indexing, verticesCEM[i].size(),
+                            verticesCEM[i].size(), Ai_values[i].size(),
+                            Ai_row_index[i].data(), Ai_col_index[i].data(),
+                            Ai_values[i].data());
+    mkl_sparse_convert_csr(AiCOO[i], SPARSE_OPERATION_NON_TRANSPOSE, &Ai[i]);
 
     MKL_INT *rows_start_new, *rows_end_new, *col_index_new;
     MKL_INT rows_new, cols_new;
     double *val_new;
-    mkl_sparse_d_export_csr(Ai, &indexing, &rows_new, &cols_new,
+    mkl_sparse_d_export_csr(Ai[i], &indexing, &rows_new, &cols_new,
                             &rows_start_new, &rows_end_new, &col_index_new,
                             &val_new);
     // for (j = 0; j < 80; ++j) {
@@ -708,8 +717,7 @@ void System::formCEM() {
             col_index_new, perm, &k0, iparm, &msglv1, rhs.data(),
             cemBasis[i].data(), &error);
 
-    mkl_sparse_destroy(Ai);
-    mkl_sparse_destroy(AiCOO);
+
   }
   std::cout << std::endl;
 }
