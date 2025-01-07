@@ -1,6 +1,7 @@
 #include "system.hh"
 #include "mkl_cblas.h"
 #include "mkl_spblas.h"
+#include <cmath>
 #include <cstdio>
 #include <iostream>
 
@@ -178,6 +179,24 @@ void System::graphPartition() {
   std::chrono::duration<double, std::milli> duration = end - start;
   std::cout << "======Finished with " << duration.count()
             << " ms======" << std::endl;
+}
+
+void System::graphPartitionPoisson() {
+  int i = 0, j = 0, k = 0;
+  for (i = 0; i < nvtxs; ++i) {
+    j = (i % size) / 10;
+    k = (i / size) / 10;
+    part[i] = j + k * 10;
+  }
+  FILE *fp;
+  if ((fp = fopen("../../partition.txt", "wb")) == NULL) {
+    printf("cant open the file");
+    exit(0);
+  }
+  for (int i = 0; i < nvtxs; i++) {
+    fprintf(fp, "%d ", part[i]);
+  }
+  fclose(fp);
 }
 
 void System::formA() {
@@ -847,7 +866,6 @@ void System::solveCEM() {
                   Ax1.data());
   double normEnergyDirect =
       cblas_ddot(nvtxs, Ax1.data(), incx, vecCEM.data(), incx);
-  
 
   cblas_daxpy(nvtxs, -1.0, vecSOL.data(), incx, vecCEM.data(), incx);
   mkl_sparse_d_mv(SPARSE_OPERATION_TRANSPOSE, 1.0, A, descr, vecCEM.data(), 0.0,
@@ -856,8 +874,6 @@ void System::solveCEM() {
       cblas_ddot(nvtxs, Ax2.data(), incx, vecCEM.data(), incx);
   std::cout << "Energy residual is: "
             << sqrt(normEnergyResidual) / sqrt(normEnergyDirect) << std::endl;
-
-  
 
   double normL2Direct = cblas_dnrm2(nvtxs, vecSOL.data(), incx);
   mkl_sparse_d_mv(SPARSE_OPERATION_TRANSPOSE, 1.0, matR, descr, cemSOL.data(),

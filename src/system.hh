@@ -67,6 +67,7 @@ public:
   void formA();
   void solve();
   void graphPartition();
+  void graphPartitionPoisson();
   void findNeighbours();
   void formAUX();
   void formCEM();

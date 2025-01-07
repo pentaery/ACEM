@@ -6,8 +6,8 @@ import os
 
 
 # 假设 size 和 part 数组
-size = 20  # 示例大小
-part = data = np.loadtxt('partition.txt')  # 示例的 part 数组，随机生成 0, 1, 或 2
+size = 100  # 示例大小
+part = data = np.loadtxt('partition.txt')  
 
 # 重塑 part 数组为 2D 网格
 grid = part.reshape((size, size))
